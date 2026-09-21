@@ -749,7 +749,7 @@ html[data-dshm][data-dshm-composer='expanded'] [data-phase='active'] [data-compo
   /* ONE seat in both states: the card's own bottom inset as last measured (the
      filler below the composer is the permanent stats strip), so collapsing the
      composer does not move the control. */
-  bottom: calc(var(--dshm-card-bottom, 30px) + 8px);
+  bottom: var(--dshm-fab-bottom, calc(var(--dshm-card-bottom, 30px) + 8px));
   display: grid;
   place-items: center;
   width: 36px;
@@ -1121,6 +1121,23 @@ html[data-dshm] *::-webkit-scrollbar {
             const wanted = seatRect.right - (railLeft - 8) - base
             setVar('--dshm-rail-inset', Math.max(0, Math.round(wanted)) + 'px')
           }
+        }
+        // The collapse toggle and the send button are one row of controls: the
+        // toggle takes the send button's centre line while expanded, measured from
+        // the send's own box so wider frames (tablets) and taller cards stay level.
+        // Collapsed there is no send button, so the toggle keeps its own seat.
+        const sendPrimary = document.querySelector('[data-dshm-primary]')
+        const fabButton = document.querySelector('[data-dshm-fab]')
+        const animatingNow = document.documentElement.hasAttribute('data-dshm-animating')
+        if (expanded && !animatingNow && sendPrimary !== null && fabButton !== null) {
+          const sendRect = sendPrimary.getBoundingClientRect()
+          const fabRect = fabButton.getBoundingClientRect()
+          if (sendRect.height > 0 && fabRect.height > 0) {
+            const centre = (sendRect.top + sendRect.bottom) / 2
+            setVar('--dshm-fab-bottom', Math.round(window.innerHeight - centre - fabRect.height / 2) + 'px')
+          }
+        } else {
+          clearVar('--dshm-fab-bottom')
         }
         // The official "back to bottom" control is right-aligned into the column
         // the rail occupies. Put it in the send button's column instead (the
