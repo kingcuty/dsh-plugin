@@ -30,9 +30,13 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 
 | 来源 | 说明 |
 | --- | --- |
-| 本仓库目录 | `/home/dev/projects/dsh-mobile-ui` |
-| 打包产物 | `dist/dsh-mobile-ui-<version>.tgz`（`npm pack --pack-destination dist` 生成） |
-| Gitee 仓库 | **https://gitee.com/rhtcai/dshplugin** —— 插件已提交在此，按 2.1 用 git 方式安装即可 |
+| 本仓库 | 插件位于 **`plugins/dsh-mobile-ui/`**（仓库：<https://gitee.com/rhtcai/dshplugin>，**私有**，需有访问权限的账号才能 clone） |
+| 打包产物 | `plugins/dsh-mobile-ui/dist/dsh-mobile-ui-<version>.tgz`（`npm pack --pack-destination dist` 生成） |
+| 安装脚本 | `plugins/dsh-mobile-ui/install.sh` —— 等价于 2.1 的手工步骤，另加 profile 备份与结果自查 |
+
+> 仓库已按「一插件一目录」规整为 `plugins/<插件名>/`，仓库根不再是包，
+> 因此旧的 `dsh plugin add git+https://gitee.com/rhtcai/dshplugin.git` **不再适用**（git 依赖只认仓库根的 `package.json`）。
+> 改用下面的仓库内路径、仓库内 tarball，或直接跑 `install.sh`。
 
 ---
 
@@ -43,9 +47,10 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 ```sh
 dsh plugin --profile web add <来源>
 # 例：
-dsh plugin --profile web add git+https://gitee.com/rhtcai/dshplugin.git   # Gitee 仓库（推荐，无需 SSH key）
-dsh plugin --profile web add ./dist/dsh-mobile-ui-0.2.1.tgz               # 本地 tarball
-dsh plugin --profile web add /abs/path/dsh-mobile-ui                      # 本地目录
+git clone git@gitee.com:rhtcai/dshplugin.git                               # 私有仓库，先拿到本仓库
+dsh plugin --profile web add ./dshplugin/plugins/dsh-mobile-ui            # 仓库里的插件目录（推荐）
+dsh plugin --profile web add ./dshplugin/plugins/dsh-mobile-ui/dist/dsh-mobile-ui-0.2.1.tgz  # 仓库里的 tarball
+dsh plugin --profile web add /abs/path/dsh-mobile-ui                      # 任意本地目录
 dsh plugin --profile web add dsh-mobile-ui                                # npm 上（发布后）
 
 # 首次安装后重启一次（bundles 层栈在进程启动时组装）
@@ -145,10 +150,11 @@ dsh plugin --profile web add ./dsh-mobile-ui-0.2.1.tgz
 systemctl --user restart dsh-web
 ```
 
-或者**直接让对方用已提交的仓库**（最省事，不用发文件）：
+或者**直接让对方用已提交的仓库**（最省事，不用发文件；仓库私有，对方账号需有访问权限）：
 
 ```sh
-dsh plugin --profile web add git+https://gitee.com/rhtcai/dshplugin.git
+git clone git@gitee.com:rhtcai/dshplugin.git
+dsh plugin --profile web add ./dshplugin/plugins/dsh-mobile-ui
 systemctl --user restart dsh-web
 ```
 
