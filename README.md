@@ -9,7 +9,7 @@
 | 插件 | 做什么 | 形态 | 适配基线 | 目录 |
 | --- | --- | --- | --- | --- |
 | **dsh-mobile-ui** | DSH Web 移动端 UI 优化（iOS / Android / 鸿蒙 UA 生效）：侧栏改悬浮抽屉、底部输入区可收缩成圆点、设置面板整屏化、手机下隐藏滚动条 | 标准 DSH profile 插件包（`dsh plugin add`，不动 DSH 源码） | DSH 0.1.5-rc 系 | [`plugins/dsh-mobile-ui/`](plugins/dsh-mobile-ui/) |
-| **access-management** | 设置页新增「访问」分区：命名登录令牌 + 一次性登录链接 + 设备列表 / 重命名 / 登出 / 整批吊销 | DSH 源码补丁包（目标机需是 DSH 源码检出） | DSH `0.1.5-rc.2`（`c291e79`） | [`plugins/access-management/`](plugins/access-management/) |
+| **dsh-access-management** | 设置页新增「访问」分区：命名登录令牌 + 一次性登录链接 + 设备列表 / 重命名 / 登出 / 整批吊销 | DSH 源码补丁包（目标机需是 DSH 源码检出） | DSH `0.1.5-rc.2`（`c291e79`） | [`plugins/dsh-access-management/`](plugins/dsh-access-management/) |
 
 ## 安装：两类插件方式不同
 
@@ -31,11 +31,11 @@ systemctl --user restart dsh-web                        # bundles 层栈在进�
 ```sh
 git clone git@gitee.com:rhtcai/dshplugin.git
 cd /path/to/deepseek-harness
-bash ../dshplugin/plugins/access-management/install.sh --repo .   # git am 补丁 → pnpm install → pnpm run build
-bash ../dshplugin/plugins/access-management/verify.sh  --repo .   # 自检
+bash ../dshplugin/plugins/dsh-access-management/install.sh --repo .   # git am 补丁 → pnpm install → pnpm run build
+bash ../dshplugin/plugins/dsh-access-management/verify.sh  --repo .   # 自检
 ```
 
-细节见该目录下的 [`交付说明.md`](plugins/access-management/交付说明.md)（含前置条件、页面验证清单、回滚与排障）。
+细节见该目录下的 [`交付说明.md`](plugins/dsh-access-management/交付说明.md)（含前置条件、页面验证清单、回滚与排障）。
 
 ## 目录约定
 
@@ -52,4 +52,4 @@ plugins/<插件名>/
 ## 历史
 
 - **2026-09-21**：仓库只有 dsh-mobile-ui 一个插件，文件直接放在仓库根。
-- **2026-09-21（本次）**：规整为「一插件一目录」，dsh-mobile-ui 移入 `plugins/dsh-mobile-ui/`；新增 `plugins/access-management/`（访问管理功能包）。旧根路径的 `git+https://gitee.com/rhtcai/dshplugin.git` 安装方式作废——git 依赖只认仓库根的 `package.json`。
+- **2026-09-21（本次）**：规整为「一插件一目录」，dsh-mobile-ui 移入 `plugins/dsh-mobile-ui/`；新增 `plugins/dsh-access-management/`（访问管理功能包）。旧根路径的 `git+https://gitee.com/rhtcai/dshplugin.git` 安装方式作废——git 依赖只认仓库根的 `package.json`。
