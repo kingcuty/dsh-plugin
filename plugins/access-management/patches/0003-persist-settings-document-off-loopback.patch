@@ -1,0 +1,35 @@
+From fc42f08a71198ea7ba384281a76dbb123c2a009d Mon Sep 17 00:00:00 2001
+From: dsh-local <dsh-local@localhost>
+Date: Wed, 16 Sep 2026 10:49:18 +0800
+Subject: [PATCH] Local deployment patch: keep the settings document persistent
+ off loopback
+
+The trusted HTTPS LAN deployment serves remote browsers, so the settings
+descriptor must stay Host-persistent instead of degrading to the memory
+backend. Marked not-upstream in place; deleting the override restores the
+shipped loopback-only policy.
+---
+ packages/client/ui-settings/src/client/index.ts | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/packages/client/ui-settings/src/client/index.ts b/packages/client/ui-settings/src/client/index.ts
+index d595952..a9aabf8 100644
+--- a/packages/client/ui-settings/src/client/index.ts
++++ b/packages/client/ui-settings/src/client/index.ts
+@@ -53,9 +53,10 @@ export const inject = ['remote', 'remote.settings']
+  */
+ export function apply(ctx: Context): void {
+   const schema = new SettingsSchemaService(ctx)
+-  // Resolved once here, where `remote` is declared in this plugin's own
+-  // `inject`; the binder hands the same answer to every scope it binds.
+-  const persistence = ctx.remote.$host.isLoopback ? 'host' : 'memory'
++  // LOCAL DEPLOYMENT PATCH (not upstream): the trusted HTTPS LAN deployment
++  // keeps the Host settings document persistent for remote browsers. Delete
++  // this override to restore the shipped loopback-only persistence policy.
++  const persistence = 'host'
+   const mirror = new SettingsDescribeMirror(ctx, persistence)
+   ctx.effect(() => {
+     const disposers = [
+-- 
+2.43.0
+

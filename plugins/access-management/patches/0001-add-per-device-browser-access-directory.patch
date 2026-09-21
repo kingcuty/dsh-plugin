@@ -1,0 +1,3292 @@
+From 3a05455291b8fdb079a18797c2a21a7b70fd97d6 Mon Sep 17 00:00:00 2001
+From: dsh-local <dsh-local@localhost>
+Date: Wed, 16 Sep 2026 10:49:29 +0800
+Subject: [PATCH] Add per-device browser access tokens and a Settings page to
+ manage them
+
+Browser authentication had one process-scoped launch token shared by every
+browser, so an operator could not issue a login link for one device, see which
+devices were signed in, or sign one out without restarting the process.
+
+Connection now owns a durable access directory at
+client-connection/browser-access holding named login tokens and the devices
+they authorized. A cookie minted from a stored token names its device, so a
+revocation refuses that device's next request. The process launch token stays
+outside the directory as the recovery entry, and version-1 cookies keep
+authenticating as unmanaged sessions, so no existing browser is signed out by
+the upgrade.
+
+The settings surface is one new client package over a generated browserAccess
+Remote namespace.
+---
+ ...-24-browser-token-authentication.i18n.yaml |   4 +-
+ ...2026-08-24-browser-token-authentication.md |   2 +-
+ ...6-08-24-browser-token-authentication.zh.md |   2 +-
+ ...6-09-16-browser-access-directory.i18n.yaml |   6 +
+ .../2026-09-16-browser-access-directory.md    |  27 ++
+ .../2026-09-16-browser-access-directory.zh.md |  27 ++
+ packages/api/remotes/src/client/index.ts      |  10 +-
+ packages/bundle/web-app/cordis.patch.yml      |   5 +
+ packages/bundle/web-app/package.json          |   1 +
+ packages/client/connection/package.json       |  21 +-
+ .../connection/src/access-controller.ts       | 144 +++++++
+ .../client/connection/src/access-types.ts     | 145 +++++++
+ .../client/connection/src/browser-access.ts   | 366 ++++++++++++++++++
+ .../client/connection/src/browser-auth.ts     | 170 ++++++--
+ packages/client/connection/src/index.ts       |   7 +
+ packages/client/connection/src/rpc-host.ts    |   6 +
+ packages/client/connection/src/rpc.ts         |   8 +
+ .../tests/browser-access.host.spec.ts         | 200 ++++++++++
+ .../tests/browser-auth.host.spec.ts           |  11 +-
+ .../connection/tests/browser-credentials.ts   |  55 ++-
+ .../client/connection/tsconfig.client.json    |   1 +
+ packages/client/connection/tsconfig.host.json |   6 +
+ .../ui-settings-access/README.i18n.yaml       |   6 +
+ packages/client/ui-settings-access/README.md  |  47 +++
+ .../client/ui-settings-access/README.zh.md    |  47 +++
+ .../client/ui-settings-access/package.json    |  62 +++
+ .../client/AccessSettingsSection.module.css   | 140 +++++++
+ .../src/client/AccessSettingsSection.tsx      | 315 +++++++++++++++
+ .../ui-settings-access/src/client/index.ts    |  76 ++++
+ .../ui-settings-access/src/client/locales.ts  |  78 ++++
+ .../ui-settings-access/src/css-modules.d.ts   |   4 +
+ .../client/ui-settings-access/src/index.ts    |   9 +
+ .../AccessSettingsSection.client.spec.tsx     | 115 ++++++
+ .../client/ui-settings-access/tsconfig.json   |  30 ++
+ .../ui-settings-access/tsdown.config.ts       |   3 +
+ pnpm-lock.yaml                                | 182 ++++++---
+ tsconfig.client.json                          |   1 +
+ tsconfig.host.json                            |   1 +
+ 38 files changed, 2227 insertions(+), 113 deletions(-)
+ create mode 100644 .agents/notes/implemented/feature/2026-09-16-browser-access-directory.i18n.yaml
+ create mode 100644 .agents/notes/implemented/feature/2026-09-16-browser-access-directory.md
+ create mode 100644 .agents/notes/implemented/feature/2026-09-16-browser-access-directory.zh.md
+ create mode 100644 packages/client/connection/src/access-controller.ts
+ create mode 100644 packages/client/connection/src/access-types.ts
+ create mode 100644 packages/client/connection/src/browser-access.ts
+ create mode 100644 packages/client/connection/tests/browser-access.host.spec.ts
+ create mode 100644 packages/client/ui-settings-access/README.i18n.yaml
+ create mode 100644 packages/client/ui-settings-access/README.md
+ create mode 100644 packages/client/ui-settings-access/README.zh.md
+ create mode 100644 packages/client/ui-settings-access/package.json
+ create mode 100644 packages/client/ui-settings-access/src/client/AccessSettingsSection.module.css
+ create mode 100644 packages/client/ui-settings-access/src/client/AccessSettingsSection.tsx
+ create mode 100644 packages/client/ui-settings-access/src/client/index.ts
+ create mode 100644 packages/client/ui-settings-access/src/client/locales.ts
+ create mode 100644 packages/client/ui-settings-access/src/css-modules.d.ts
+ create mode 100644 packages/client/ui-settings-access/src/index.ts
+ create mode 100644 packages/client/ui-settings-access/tests/AccessSettingsSection.client.spec.tsx
+ create mode 100644 packages/client/ui-settings-access/tsconfig.json
+ create mode 100644 packages/client/ui-settings-access/tsdown.config.ts
+
+diff --git a/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.i18n.yaml b/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.i18n.yaml
+index 88e2561..8180e4d 100644
+--- a/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.i18n.yaml
++++ b/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.md
+-2026-08-24-browser-token-authentication.md: cdfed1f250de6def39e386cf9fcd2e536c6c97e4
+-2026-08-24-browser-token-authentication.zh.md: 29f3a6c0a2d83ed1c17b9c0bc5988c9472741f3f
++2026-08-24-browser-token-authentication.md: 2fe73dd77f5b5581a1a61669695ab397762e0fd1
++2026-08-24-browser-token-authentication.zh.md: a679ff2a7f13390fa6e99518817ae377fc1580b6
+diff --git a/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.md b/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.md
+index cdfed1f..2fe73dd 100644
+--- a/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.md
++++ b/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.md
+@@ -16,7 +16,7 @@ Each Host process generates a random launch token, retained by the root applicat
+ 
+ The cookie is a signed, authority-bound bearer. Its deterministic name and signed payload both include the normalized hostname plus port, so one Harness home can run independent Web ports without cookie collisions. The payload carries safe-integer issue and expiry times under an absolute lifetime; `cookieMaxAgeDays` defaults to 30. The cookie is host-only, `Path=/`, `HttpOnly`, and `SameSite=Strict`. It omits `Secure` because the shipped server uses loopback HTTP. There is no logout operation or reverse-proxy-specific handling.
+ 
+-The HMAC secret is a versioned `grant` record at `client-connection/browser-session` in `ctx.credentials`; the local provider stores it in `$DSH_HOME/.credentials.yaml`. Connection loads or creates the record during activation and retains the secret for synchronous request verification. An active Connection continues using its loaded secret if the durable record changes; the next activation loads the replacement or creates a missing record, so deleting the record and restarting the process revokes every existing cookie. Invalid owner payloads fail loud instead of being replaced. The launch token itself is never persisted and changes on every process start, while an unexpired cookie remains valid across restarts on the same authority.
++The HMAC secret is a versioned `grant` record at `client-connection/browser-session` in `ctx.credentials`; the local provider stores it in `$DSH_HOME/.credentials.yaml`. Connection loads or creates the record during activation and retains the secret for synchronous request verification. An active Connection continues using its loaded secret if the durable record changes; the next activation loads the replacement or creates a missing record, so deleting the record and restarting the process revokes every existing cookie. Invalid owner payloads fail loud instead of being replaced. The launch token itself is never persisted and changes on every process start, while an unexpired cookie remains valid across restarts on the same authority. Named per-device login tokens and the devices they authorized extend this mechanism in [Per-device browser access tokens](../feature/2026-09-16-browser-access-directory.md): the launch token stays outside that directory as the recovery entry, and a cookie minted from a stored token names the device a revocation refuses.
+ 
+ The in-page Web Worker preview exposes no network socket. Its page-owned `postMessage` tunnel enters the real route first, then retries a 401 or 403 through the worker-local fetch handler. This keeps Connection interceptors while limiting the authentication bypass to the page that created the Host worker.
+ 
+diff --git a/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.zh.md b/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.zh.md
+index 29f3a6c..a679ff2 100644
+--- a/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.zh.md
++++ b/.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.zh.md
+@@ -16,7 +16,7 @@ Web Host 以当前操作系统用户的权限运行具有工具能力的 Session
+ 
+ cookie 是签名且绑定 authority 的 bearer。确定性名称与签名 payload 都包含规范化 hostname 和 port，因此同一 Harness home 可以在不同 Web port 运行而不发生 cookie 冲突。payload 在绝对有效期内携带安全整数形式的签发与过期时间；`cookieMaxAgeDays` 默认为 30。cookie 是 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`。随附服务器使用 loopback HTTP，因此不设置 `Secure`。这里没有 logout 操作或反向代理专用处理。
+ 
+-HMAC 密钥是 `ctx.credentials` 中位于 `client-connection/browser-session` 的版本化 `grant` 记录；本地提供方将其存入 `$DSH_HOME/.credentials.yaml`。Connection 在激活期间加载或创建该记录，并保留密钥以同步校验请求。持久记录发生变化后，当前 Connection 继续使用已加载的密钥；下一次激活会加载替换记录或创建缺失记录，因此删除记录并重启进程会撤销全部既有 cookie。无效 owner payload 会明确失败，而不是被覆盖。启动令牌本身绝不持久化并在每次进程启动时变化；未过期 cookie 则能在相同 authority 上跨重启继续有效。
++HMAC 密钥是 `ctx.credentials` 中位于 `client-connection/browser-session` 的版本化 `grant` 记录；本地提供方将其存入 `$DSH_HOME/.credentials.yaml`。Connection 在激活期间加载或创建该记录，并保留密钥以同步校验请求。持久记录发生变化后，当前 Connection 继续使用已加载的密钥；下一次激活会加载替换记录或创建缺失记录，因此删除记录并重启进程会撤销全部既有 cookie。无效 owner payload 会明确失败，而不是被覆盖。启动令牌本身绝不持久化并在每次进程启动时变化；未过期 cookie 则能在相同 authority 上跨重启继续有效。命名登录令牌与它们授权的设备在[逐设备浏览器访问令牌](../feature/2026-09-16-browser-access-directory.zh.md)中扩展了该机制：启动令牌留在那份目录之外作为恢复入口，而由存储令牌签发的 cookie 会指明吊销所拒绝的那台设备。
+ 
+ 页内 Web Worker preview 不暴露网络 socket。其由页面持有的 `postMessage` tunnel 先进入真实 route，收到 401 或 403 后再经 worker 本地 fetch handler 重试。这样既保留 Connection interceptor，又把认证绕过限制在创建 Host worker 的页面内。
+ 
+diff --git a/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.i18n.yaml b/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.i18n.yaml
+new file mode 100644
+index 0000000..669954c
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.i18n.yaml
+@@ -0,0 +1,6 @@
++# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
++# side as of the last confirmed-consistent state. Both languages carry equal authority;
++# after editing either side, bring the other along and re-record with:
++#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-browser-access-directory.md
++2026-09-16-browser-access-directory.md: 8221065ca172e577962d20dc3a113bddc9d7a4fb
++2026-09-16-browser-access-directory.zh.md: 71868a04d79a73d25e8d5a0f504d301ce61013e5
+diff --git a/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.md b/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.md
+new file mode 100644
+index 0000000..8221065
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.md
+@@ -0,0 +1,27 @@
++# Agent Note: Per-device browser access tokens and a Settings page to manage them
++
++Status: implemented
++
++English | [中文](2026-09-16-browser-access-directory.zh.md)
++
++## Problem
++
++Browser authentication had exactly one credential: a process-scoped launch token minted at startup, shared by every browser, and a signed cookie derived from one durable secret. An operator could not issue a login link for one new device, could not see which devices were signed in, and could not sign one out — the only revocation was restarting the process, which signed everyone out.
++
++## Decision
++
++**Connection owns a durable access directory beside the signing secret.** [browser-access.ts](../../../../packages/client/connection/src/browser-access.ts) keeps named login tokens and the devices they authorized in one credential record (`client-connection/browser-access`). Writes publish to memory first and persist on a serialized queue, so the synchronous cookie check never waits on storage.
++
++**A session cookie names its device.** [browser-auth.ts](../../../../packages/client/connection/src/browser-auth.ts) accepts any stored token as well as the process launch token, and mints a version-2 cookie carrying the device id it recorded (address and User-Agent included). Version-1 cookies keep authenticating as unmanaged sessions: they predate the directory, so they neither appear in the device list nor can be revoked, and no existing browser is signed out by the upgrade.
++
++**An unknown device is accepted; a revoked one is refused.** A device id absent from the directory authenticates, because the record is written asynchronously and a directory rebuilt after storage damage must not sign every browser out. Revocation sets `revokedAt` and keeps the row, so refusal is a positive fact rather than a missing one.
++
++**The process launch token stays outside the directory.** It is the recovery entry: authentication consults it before the directory, so an unreadable record still lets an operator reach Settings and repair it. A damaged record is reported by the Remote view instead of silently reading as "no devices", and it suspends revocation rather than locking every browser out.
++
++**The settings surface is one new feature package.** [ui-settings-access](../../../../packages/client/ui-settings-access) registers a `settings.section` beside General and Plugins and calls the generated `browserAccess` Remote namespace; [access-controller.ts](../../../../packages/client/connection/src/access-controller.ts) is its Host owner. A minted token's secret appears in exactly one answer and in no list view.
++
++**Connection joins the Host aggregate.** `packages/client/connection/tsconfig.host.json` was reachable only from the Client aggregate, so Typert never analyzed the package; registering it in `tsconfig.host.json` is what makes `./typert` and `./remote` artifacts exist at all.
++
++## Consequences
++
++Any authenticated device may manage tokens: reaching the namespace already required a session cookie, which is this deployment's whole authority model. A session minted before the upgrade cannot be listed or revoked until its browser signs in again through a token. Nothing here is model-visible: no prompt text, tool schema, session event, or request token changes.
+diff --git a/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.zh.md b/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.zh.md
+new file mode 100644
+index 0000000..71868a0
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-09-16-browser-access-directory.zh.md
+@@ -0,0 +1,27 @@
++# Agent Note：逐设备浏览器访问令牌与配套设置页
++
++Status: implemented
++
++[English](2026-09-16-browser-access-directory.md) | 中文
++
++## Problem
++
++浏览器认证此前只有一个凭据：启动时随机生成的**进程级**登录令牌，所有浏览器共用，加上由一个持久密钥签出的会话 cookie。运维者无法为某台新设备单独签发登录链接，看不到有哪些设备已登录，也无法把其中一台登出——唯一的吊销手段是重启进程，而那会把所有人一起登出。
++
++## Decision
++
++**Connection 在签名密钥之外持有一份持久访问目录。** [browser-access.ts](../../../../packages/client/connection/src/browser-access.ts) 把命名登录令牌与它们授权的设备放在一个凭证记录（`client-connection/browser-access`）里。写入先落到内存、再在串行队列上持久化，因此同步的 cookie 校验从不等存储。
++
++**会话 cookie 指明它属于哪台设备。** [browser-auth.ts](../../../../packages/client/connection/src/browser-auth.ts) 既接受存储的令牌，也接受进程级应急令牌，并签发携带所记录设备 id 的 v2 cookie（同时记录地址与 User-Agent）。v1 cookie 继续作为「未托管会话」通过认证：它们早于本目录存在，因此既不出现在设备列表里也无法被吊销，升级不会把任何既有浏览器登出。
++
++**未知设备放行，已吊销设备拒绝。** 目录里查不到的设备 id 一律认证通过——记录是异步写入的，而且存储损坏后重建的目录不该把所有浏览器登出。吊销写入 `revokedAt` 并保留该行，因此「拒绝」是一个明确的事实，而不是「查不到」。
++
++**进程级应急令牌留在目录之外。** 它是恢复入口：认证先查它再查目录，所以记录读不出来时运维者仍能进入设置页修复。目录损坏会由 Remote 视图报出，而不是静默地读成「没有设备」，并且它让吊销暂时失效，而不是把每台浏览器锁在门外。
++
++**设置界面是一个新功能包。** [ui-settings-access](../../../../packages/client/ui-settings-access) 在 General 与 Plugins 之旁注册一个 `settings.section`，调用生成的 `browserAccess` Remote 命名空间；[access-controller.ts](../../../../packages/client/connection/src/access-controller.ts) 是它的 Host 侧拥有者。令牌密钥只出现在创建它的那一次应答里，任何列表视图都不包含它。
++
++**Connection 进入 Host 聚合。** `packages/client/connection/tsconfig.host.json` 此前只被 Client 聚合引用，Typert 从未分析该包；把它登记进 `tsconfig.host.json` 才是 `./typert` 与 `./remote` 产物得以存在的原因。
++
++## Consequences
++
++任何已认证设备都可以管理令牌：能触达该命名空间本身就要求一个会话 cookie，而这正是本部署的完整权限模型。升级前签发的会话在对应浏览器用令牌重新登录之前，既不能被列出也不能被吊销。此处没有任何模型可见的东西：提示词、工具 schema、会话事件、请求 token 都不变。
+diff --git a/packages/api/remotes/src/client/index.ts b/packages/api/remotes/src/client/index.ts
+index fa0dae2..3391df1 100644
+--- a/packages/api/remotes/src/client/index.ts
++++ b/packages/api/remotes/src/client/index.ts
+@@ -11,6 +11,7 @@ import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote
+ import messageFeedbackRemote from '@deepseek-ai/dsh-message-feedback/remote'
+ import sessionFeedbackRemote from '@deepseek-ai/dsh-command-feedback/remote'
+ import fileUploadsRemote from '@deepseek-ai/dsh-client-file-upload/remote'
++import browserAccessRemote from '@deepseek-ai/dsh-client-connection/remote'
+ import sessionReferencesRemote from '@deepseek-ai/dsh-session-reference/remote'
+ import subagentsRemote from '@deepseek-ai/dsh-subagent/remote'
+ import sessionRemote from '@deepseek-ai/dsh-api-session-controller/remote'
+@@ -29,6 +30,7 @@ export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
+ export type {} from '@deepseek-ai/dsh-message-feedback/remote'
+ export type {} from '@deepseek-ai/dsh-command-feedback/remote'
+ export type {} from '@deepseek-ai/dsh-client-file-upload/remote'
++export type {} from '@deepseek-ai/dsh-client-connection/remote'
+ export type {} from '@deepseek-ai/dsh-session-reference/remote'
+ export type {} from '@deepseek-ai/dsh-subagent/remote'
+ export type * from '@deepseek-ai/dsh-subagent/client'
+@@ -108,6 +110,11 @@ export type {
+ } from '@deepseek-ai/dsh-cordis-host-runner/types'
+ // Credential state vocabulary for the credentials namespace (values never ride it).
+ export type { CredentialInfo } from '@deepseek-ai/dsh-credentials/types'
++// Access-directory vocabulary for the browserAccess namespace. Secrets never
++// ride it: only the mint call answers with one.
++export type {
++  AccessDeviceView, AccessDirectoryView, AccessMintedTokenView, AccessTokenView,
++} from '@deepseek-ai/dsh-client-connection/types'
+ // Redacted namespace vocabulary for the settings namespace (secrets never ride
+ // it). It travels with its seam, whose `./types` the Client face already reads.
+ export type {
+@@ -152,7 +159,8 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
+   try {
+     for (const contribution of [
+       agentPresetsRemote, commandsRemote, settingsControllerRemote, goalsRemote, llmRemote, dynamicRemote,
+-      pluginInventoryRemote, messageFeedbackRemote, sessionFeedbackRemote, fileUploadsRemote, sessionReferencesRemote,
++      pluginInventoryRemote, messageFeedbackRemote, sessionFeedbackRemote, fileUploadsRemote, browserAccessRemote,
++      sessionReferencesRemote,
+       subagentsRemote, sessionRemote, workspaceRemote, workspaceFilesRemote,
+     ]) {
+       disposers.push(await ctx.remote.$mount(contribution))
+diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
+index cf46030..63292c7 100644
+--- a/packages/bundle/web-app/cordis.patch.yml
++++ b/packages/bundle/web-app/cordis.patch.yml
+@@ -328,6 +328,11 @@
+     - id: ui-permission
+       name: '@deepseek-ai/dsh-client-ui-permission-presets'
+ 
++    # Access settings: named login tokens and the browser devices each one
++    # authorized, so an operator enrolls and retires devices without shelling in.
++    - id: ui-settings-access
++      name: '@deepseek-ai/dsh-client-ui-settings-access'
++
+     # The agent-preset row in General settings: the default preset for
+     # sessions created later. Absent a roster it renders nothing.
+     - id: ui-agent-preset
+diff --git a/packages/bundle/web-app/package.json b/packages/bundle/web-app/package.json
+index 3498cb6..166a55c 100644
+--- a/packages/bundle/web-app/package.json
++++ b/packages/bundle/web-app/package.json
+@@ -77,6 +77,7 @@
+     "@deepseek-ai/dsh-client-ui-schedule": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-session": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-settings-access": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-settings-general": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-settings-models": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-settings-plugin-inventory": "workspace:^",
+diff --git a/packages/client/connection/package.json b/packages/client/connection/package.json
+index 4732dcd..11924b3 100644
+--- a/packages/client/connection/package.json
++++ b/packages/client/connection/package.json
+@@ -22,6 +22,18 @@
+       "types": "./lib/types/client/index.d.ts",
+       "default": "./lib/client.js"
+     },
++    "./types": {
++      "types": "./lib/types/access-types.d.ts",
++      "default": "./lib/types/access-types.js"
++    },
++    "./typert": {
++      "types": "./lib/typert.host.d.ts",
++      "default": "./lib/typert.host.js"
++    },
++    "./remote": {
++      "types": "./lib/typert.remote-client.d.ts",
++      "default": "./lib/typert.remote-client.js"
++    },
+     "./src/*": "./src/*",
+     "./package.json": "./package.json"
+   },
+@@ -35,13 +47,19 @@
+   "license": "MIT",
+   "dependencies": {
+     "@deepseek-ai/dsh-credentials": "workspace:^",
++    "@deepseek-ai/dsh-typert-protocol": "workspace:^",
+     "@deepseek-ai/schemastery": "workspace:^",
+     "zod": "^4.4.3"
+   },
+   "files": [
+     "lib/index.js",
+     "lib/client.js",
+-    "lib/types/**/*.d.ts"
++    "lib/types/**/*.js",
++    "lib/types/**/*.d.ts",
++    "lib/typert.host.js",
++    "lib/typert.host.d.ts",
++    "lib/typert.remote-client.js",
++    "lib/typert.remote-client.d.ts"
+   ],
+   "peerDependencies": {
+     "@deepseek-ai/cordis": "workspace:^"
+@@ -58,6 +76,7 @@
+     "@deepseek-ai/dsh-session": "workspace:^",
+     "@deepseek-ai/dsh-settings": "workspace:^",
+     "@deepseek-ai/dsh-tool-todo": "workspace:^",
++    "@deepseek-ai/dsh-typert-protocol": "workspace:^",
+     "@deepseek-ai/dsh-util-values": "workspace:^"
+   }
+ }
+diff --git a/packages/client/connection/src/access-controller.ts b/packages/client/connection/src/access-controller.ts
+new file mode 100644
+index 0000000..4fd31dd
+--- /dev/null
++++ b/packages/client/connection/src/access-controller.ts
+@@ -0,0 +1,144 @@
++/**
++ * Host Remote owner for the browser-access directory: what the Access settings
++ * page lists and edits. Every write answers with the whole directory, so the
++ * page never reconciles a partial update against its own copy.
++ *
++ * Reaching this namespace already required a valid session cookie, which is
++ * this deployment's whole authority model; a device that can open Settings can
++ * therefore also manage tokens.
++ */
++
++import { Context } from '@deepseek-ai/cordis'
++import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
++import { ACCESS_LABEL_MAX_LENGTH } from './browser-access.ts'
++import type {
++  AccessDeviceView, AccessDirectoryView, AccessMintedTokenView, AccessTokenView,
++  BrowserAccessHandle, StoredDevice, StoredToken,
++} from './access-types.ts'
++// Type-only: resolves the `connection` Context augmentation this controller reads.
++import type {} from './rpc-host.ts'
++
++/** Validate one operator-supplied label at the wire boundary. */
++function requireLabel(value: string): string {
++  const label = value.trim()
++  if (label.length === 0 || label.length > ACCESS_LABEL_MAX_LENGTH) {
++    throw new RangeError(`label must be 1 to ${String(ACCESS_LABEL_MAX_LENGTH)} characters`)
++  }
++  return label
++}
++
++/** Project one stored device onto its wire view. */
++function deviceView(device: StoredDevice, tokens: readonly StoredToken[]): AccessDeviceView {
++  const token = device.tokenId === undefined
++    ? undefined
++    : tokens.find(entry => entry.id === device.tokenId)
++  return {
++    id: device.id,
++    createdAt: device.createdAt,
++    lastSeenAt: device.lastSeenAt,
++    expiresAt: device.expiresAt,
++    revoked: device.revokedAt !== undefined,
++    ...device.tokenId === undefined ? {} : { tokenId: device.tokenId },
++    ...device.label === undefined ? {} : { label: device.label },
++    ...token === undefined ? {} : { tokenLabel: token.label },
++    ...device.userAgent === undefined ? {} : { userAgent: device.userAgent },
++    ...device.address === undefined ? {} : { address: device.address },
++  }
++}
++
++/** Project one stored token onto its wire view. */
++function tokenView(token: StoredToken, devices: readonly StoredDevice[]): AccessTokenView {
++  return {
++    id: token.id,
++    label: token.label,
++    createdAt: token.createdAt,
++    deviceCount: devices.filter(device =>
++      device.tokenId === token.id && device.revokedAt === undefined).length,
++    ...token.lastUsedAt === undefined ? {} : { lastUsedAt: token.lastUsedAt },
++  }
++}
++
++/** Host service backing the generated `ctx.remote.browserAccess` namespace. */
++export class BrowserAccessController extends TypertRemoteService {
++  static inject = ['connection']
++
++  /** @param ctx - Host context carrying the Connection service. */
++  constructor(ctx: Context) {
++    super(ctx, 'browserAccess')
++  }
++
++  /**
++   * Read the whole access directory.
++   * @returns named tokens with their device counts, and every recorded device.
++   */
++  @Remote
++  directory(): AccessDirectoryView {
++    return this.view()
++  }
++
++  /**
++   * Mint one named login token.
++   * @param label - operator-supplied name.
++   * @returns the new token row and the secret shown exactly once.
++   */
++  @Remote
++  async createToken(label: string): Promise<AccessMintedTokenView> {
++    const token = this.access.createToken(requireLabel(label), Date.now())
++    await this.access.settled()
++    return { token: tokenView(token, this.access.devices()), secret: token.secret }
++  }
++
++  /**
++   * Drop one token, revoking the devices it authorized.
++   * @param id - token id to drop.
++   * @returns the directory after the drop.
++   */
++  @Remote
++  async revokeToken(id: string): Promise<AccessDirectoryView> {
++    this.access.revokeToken(id, Date.now())
++    await this.access.settled()
++    return this.view()
++  }
++
++  /**
++   * Set or clear one device's name.
++   * @param id - device id to rename.
++   * @param label - new name; undefined clears it.
++   * @returns the directory after the rename.
++   */
++  @Remote
++  async renameDevice(id: string, label: string | undefined): Promise<AccessDirectoryView> {
++    this.access.renameDevice(id, label === undefined ? undefined : requireLabel(label))
++    await this.access.settled()
++    return this.view()
++  }
++
++  /**
++   * Revoke one device, refusing its cookies from the next request onward.
++   * @param id - device id to revoke.
++   * @returns the directory after the revocation.
++   */
++  @Remote
++  async revokeDevice(id: string): Promise<AccessDirectoryView> {
++    this.access.revokeDevice(id, Date.now())
++    await this.access.settled()
++    return this.view()
++  }
++
++  /** Directory operations owned by Connection, where authentication reads them. */
++  private get access(): BrowserAccessHandle {
++    return this.ctx.connection.access
++  }
++
++  /** Assemble the complete wire view from the shared in-memory directory. */
++  private view(): AccessDirectoryView {
++    const tokens = this.access.tokens()
++    const devices = this.access.devices()
++    const damaged = this.access.damaged
++    return {
++      tokens: tokens.map(token => tokenView(token, devices)),
++      devices: devices.map(device => deviceView(device, tokens)),
++      ...damaged === undefined ? {} : { damaged },
++    }
++  }
++}
+diff --git a/packages/client/connection/src/access-types.ts b/packages/client/connection/src/access-types.ts
+new file mode 100644
+index 0000000..c12c3ec
+--- /dev/null
++++ b/packages/client/connection/src/access-types.ts
+@@ -0,0 +1,145 @@
++/**
++ * Browser-access vocabulary in one client-safe, types-only module: the
++ * settings views that cross the Remote wire, the durable record shapes behind
++ * them, and the handle Connection publishes to the access controller. The store
++ * that interprets these shapes owns the runtime.
++ */
++
++/** One named login token as the access settings list renders it. */
++export interface AccessTokenView {
++  /** Stable id addressed by revoke. */
++  readonly id: string
++  /** Operator-supplied name. */
++  readonly label: string
++  /** Creation time, epoch milliseconds. */
++  readonly createdAt: number
++  /** Last successful token exchange, absent until the token is first used. */
++  readonly lastUsedAt?: number
++  /** Devices this token currently authorizes (revoked devices excluded). */
++  readonly deviceCount: number
++}
++
++/** One browser session holding a signed session cookie. */
++export interface AccessDeviceView {
++  /** Stable id addressed by rename and revoke. */
++  readonly id: string
++  /** Token that authorized this device; absent for the process launch token. */
++  readonly tokenId?: string
++  /** Operator-supplied name. */
++  readonly label?: string
++  /** Authorizing token's label, so a row renders without a second lookup. */
++  readonly tokenLabel?: string
++  /** Raw `User-Agent` reported when the device first authenticated. */
++  readonly userAgent?: string
++  /** Client address reported when the device first authenticated. */
++  readonly address?: string
++  /** Creation time, epoch milliseconds. */
++  readonly createdAt: number
++  /** Last authenticated request, epoch milliseconds. */
++  readonly lastSeenAt: number
++  /** Absolute cookie expiry, epoch milliseconds. */
++  readonly expiresAt: number
++  /** Whether this device's cookies are refused. */
++  readonly revoked: boolean
++}
++
++/** The complete access directory. */
++export interface AccessDirectoryView {
++  /** Named login tokens in creation order. */
++  readonly tokens: readonly AccessTokenView[]
++  /** Session devices in creation order, revoked ones included. */
++  readonly devices: readonly AccessDeviceView[]
++  /**
++   * Set when the stored directory could not be read and was ignored. The
++   * settings surface reports it instead of silently showing an empty list.
++   */
++  readonly damaged?: string
++}
++
++/** One minted token: its directory row plus the secret shown exactly once. */
++export interface AccessMintedTokenView {
++  /** The new directory row. */
++  readonly token: AccessTokenView
++  /** Login secret; the settings page builds `/?token=<secret>` from it. */
++  readonly secret: string
++}
++
++/** One stored login token. */
++export interface StoredToken {
++  /** Stable id addressed by revoke. */
++  readonly id: string
++  /** Operator-supplied name. */
++  readonly label: string
++  /** Secret accepted as `?token=`; never leaves the Host. */
++  readonly secret: string
++  /** Creation time, epoch milliseconds. */
++  readonly createdAt: number
++  /** Last successful token exchange, absent until first used. */
++  readonly lastUsedAt?: number
++}
++
++/** One stored browser device. */
++export interface StoredDevice {
++  /** Stable id carried by the session cookie and addressed by the settings list. */
++  readonly id: string
++  /** Token that authorized this device; absent for the process launch token. */
++  readonly tokenId?: string
++  /** Operator-supplied name. */
++  readonly label?: string
++  /** Raw `User-Agent` reported at creation. */
++  readonly userAgent?: string
++  /** Client address reported at creation. */
++  readonly address?: string
++  /** Creation time, epoch milliseconds. */
++  readonly createdAt: number
++  /** Last authenticated request, epoch milliseconds. */
++  readonly lastSeenAt: number
++  /** Absolute cookie expiry, epoch milliseconds. */
++  readonly expiresAt: number
++  /** Revocation time, absent while the device may authenticate. */
++  readonly revokedAt?: number
++}
++
++/**
++ * The directory operations Connection publishes to the access controller.
++ * Connection keeps the instance's identity because authentication reads the
++ * same in-memory state synchronously; the controller only needs this surface.
++ */
++export interface BrowserAccessHandle {
++  /** @returns every stored token, in creation order. */
++  tokens(): readonly StoredToken[]
++  /** @returns every stored device, in creation order. */
++  devices(): readonly StoredDevice[]
++  /**
++   * Add a named login token.
++   * @param label - operator-supplied name.
++   * @param now - creation time in epoch milliseconds.
++   * @returns the created token, secret included.
++   */
++  createToken(label: string, now: number): StoredToken
++  /**
++   * Drop a token and revoke the devices it authorized.
++   * @param id - token id to drop.
++   * @param now - revocation time in epoch milliseconds.
++   * @returns true when a token was dropped.
++   */
++  revokeToken(id: string, now: number): boolean
++  /**
++   * Set or clear one device's operator-supplied name.
++   * @param id - device id to rename.
++   * @param label - new name; undefined clears it.
++   * @returns true when a device was renamed.
++   */
++  renameDevice(id: string, label: string | undefined): boolean
++  /**
++   * Revoke one device.
++   * @param id - device id to revoke.
++   * @param now - revocation time in epoch milliseconds.
++   * @returns true when a device was revoked.
++   */
++  revokeDevice(id: string, now: number): boolean
++  /** Unusable-storage report, absent while the directory is sound. */
++  readonly damaged: string | undefined
++  /** @returns after every queued write drains. */
++  settled(): Promise<void>
++}
+diff --git a/packages/client/connection/src/browser-access.ts b/packages/client/connection/src/browser-access.ts
+new file mode 100644
+index 0000000..a5b0b0e
+--- /dev/null
++++ b/packages/client/connection/src/browser-access.ts
+@@ -0,0 +1,366 @@
++/**
++ * Durable browser-access directory: named login tokens, and the browser
++ * devices each token authorized. The cookie signing secret keeps its own
++ * record (`client-connection/browser-session`); this one is the directory the
++ * access settings surface reads and writes.
++ *
++ * Writes update the in-memory directory first and persist on a serialized
++ * queue, so the synchronous authentication path never waits on storage.
++ */
++
++import { randomBytes } from 'node:crypto'
++import { credentialKey } from '@deepseek-ai/dsh-credentials'
++import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
++import type { BrowserAccessHandle, StoredDevice, StoredToken } from './access-types.ts'
++
++const ACCESS_RECORD_KEY = credentialKey('client-connection', 'browser-access')
++const STORED_VERSION = 1
++const SECRET_BYTES = 32
++const ID_BYTES = 9
++
++/** Longest accepted token or device label. */
++export const ACCESS_LABEL_MAX_LENGTH = 64
++
++interface StoredAccess {
++  readonly version: typeof STORED_VERSION
++  readonly tokens: readonly StoredToken[]
++  readonly devices: readonly StoredDevice[]
++}
++
++const EMPTY_ACCESS: StoredAccess = { version: STORED_VERSION, tokens: [], devices: [] }
++
++/** Fresh url-safe identifier for one token or device. */
++function mintId(): string {
++  return randomBytes(ID_BYTES).toString('base64url')
++}
++
++/** Fresh url-safe login secret. */
++export function mintSecret(): string {
++  return randomBytes(SECRET_BYTES).toString('base64url')
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return typeof value === 'object' && value !== null && !Array.isArray(value)
++}
++
++function optionalString(value: unknown): string | undefined {
++  return typeof value === 'string' ? value : undefined
++}
++
++function optionalTimestamp(value: unknown): number | undefined {
++  return typeof value === 'number' && Number.isSafeInteger(value) ? value : undefined
++}
++
++function parseToken(value: unknown): StoredToken {
++  if (!isRecord(value)) throw new TypeError('access token entry is not an object')
++  const id = optionalString(value.id)
++  const label = optionalString(value.label)
++  const secret = optionalString(value.secret)
++  const createdAt = optionalTimestamp(value.createdAt)
++  if (id === undefined || label === undefined || secret === undefined || createdAt === undefined) {
++    throw new TypeError('access token entry is missing id, label, secret, or createdAt')
++  }
++  const lastUsedAt = optionalTimestamp(value.lastUsedAt)
++  return { id, label, secret, createdAt, ...lastUsedAt === undefined ? {} : { lastUsedAt } }
++}
++
++function parseDevice(value: unknown): StoredDevice {
++  if (!isRecord(value)) throw new TypeError('access device entry is not an object')
++  const id = optionalString(value.id)
++  const createdAt = optionalTimestamp(value.createdAt)
++  const lastSeenAt = optionalTimestamp(value.lastSeenAt)
++  const expiresAt = optionalTimestamp(value.expiresAt)
++  if (id === undefined || createdAt === undefined || lastSeenAt === undefined || expiresAt === undefined) {
++    throw new TypeError('access device entry is missing id, createdAt, lastSeenAt, or expiresAt')
++  }
++  const tokenId = optionalString(value.tokenId)
++  const label = optionalString(value.label)
++  const userAgent = optionalString(value.userAgent)
++  const address = optionalString(value.address)
++  const revokedAt = optionalTimestamp(value.revokedAt)
++  return {
++    id, createdAt, lastSeenAt, expiresAt,
++    ...tokenId === undefined ? {} : { tokenId },
++    ...label === undefined ? {} : { label },
++    ...userAgent === undefined ? {} : { userAgent },
++    ...address === undefined ? {} : { address },
++    ...revokedAt === undefined ? {} : { revokedAt },
++  }
++}
++
++/** Decode one stored record, rejecting anything this build cannot address. */
++function parseStored(record: CredentialRecord): StoredAccess {
++  if (record.kind !== 'grant' || !isRecord(record.payload)) {
++    throw new TypeError('access directory record has an unsupported format')
++  }
++  if (record.payload.version !== STORED_VERSION) {
++    throw new TypeError('access directory record has an unsupported version')
++  }
++  const rawTokens = record.payload.tokens
++  const rawDevices = record.payload.devices
++  if (!Array.isArray(rawTokens) || !Array.isArray(rawDevices)) {
++    throw new TypeError('access directory record is missing token or device arrays')
++  }
++  return {
++    version: STORED_VERSION,
++    tokens: rawTokens.map(parseToken),
++    devices: rawDevices.map(parseDevice),
++  }
++}
++
++/** One device registration request gathered from the authenticating request. */
++export interface DeviceRegistration {
++  readonly tokenId?: string
++  readonly userAgent?: string
++  readonly address?: string
++  readonly createdAt: number
++  readonly expiresAt: number
++}
++
++/**
++ * In-memory access directory backed by one credential record.
++ *
++ * An unreadable record never fails activation: the directory starts empty,
++ * reports {@link damage}, and the process launch token keeps working so an
++ * operator can still reach Settings and rebuild it.
++ */
++export class BrowserAccessDirectory implements BrowserAccessHandle {
++  private state: StoredAccess
++  private writeFailure: string | undefined
++  private writes: Promise<void> = Promise.resolve()
++
++  private constructor(
++    private readonly credentials: CredentialProvider,
++    state: StoredAccess,
++    private readonly readFailure: string | undefined,
++  ) {
++    this.state = state
++  }
++
++  /**
++   * Read the stored directory, degrading to an empty one when it is unreadable.
++   * @param credentials - persistent credential provider for this Harness home.
++   * @returns the loaded directory.
++   */
++  static async load(credentials: CredentialProvider): Promise<BrowserAccessDirectory> {
++    try {
++      const record = await credentials.readRecord(ACCESS_RECORD_KEY)
++      if (record === undefined) return new BrowserAccessDirectory(credentials, EMPTY_ACCESS, undefined)
++      return new BrowserAccessDirectory(credentials, parseStored(record), undefined)
++    } catch (error) {
++      const message = error instanceof Error ? error.message : String(error)
++      return new BrowserAccessDirectory(credentials, EMPTY_ACCESS, message)
++    }
++  }
++
++  /**
++   * Why the stored directory is not usable, if it is not.
++   * @returns the read or write failure message, absent while storage is sound.
++   */
++  get damaged(): string | undefined {
++    return this.readFailure ?? this.writeFailure
++  }
++
++  /**
++   * Whether a damaged directory still authorizes existing device cookies.
++   * A damaged directory accepts them rather than locking every browser out;
++   * revoke stops taking effect until storage is repaired.
++   * @returns true when device lookup cannot be trusted.
++   */
++  get unenforceable(): boolean {
++    return this.damaged !== undefined
++  }
++
++  /** @returns every stored token, in creation order. */
++  tokens(): readonly StoredToken[] {
++    return this.state.tokens
++  }
++
++  /** @returns every stored device, in creation order. */
++  devices(): readonly StoredDevice[] {
++    return this.state.devices
++  }
++
++  /**
++   * Find the token owning one presented secret.
++   * @param secret - secret presented as `?token=`.
++   * @returns the matching token, absent when no token owns it.
++   */
++  tokenBySecret(secret: string): StoredToken | undefined {
++    return this.state.tokens.find(token => token.secret === secret)
++  }
++
++  /**
++   * Find one device by id.
++   * @param id - device id carried by a session cookie.
++   * @returns the stored device, absent when it was never or no longer recorded.
++   */
++  device(id: string): StoredDevice | undefined {
++    return this.state.devices.find(device => device.id === id)
++  }
++
++  /**
++   * Whether one device id may still authenticate.
++   * @param id - device id carried by a session cookie.
++   * @returns true when the device is live, or when the directory is damaged.
++   */
++  deviceActive(id: string): boolean {
++    if (this.unenforceable) return true
++    const device = this.device(id)
++    return device !== undefined && device.revokedAt === undefined
++  }
++
++  /**
++   * Add a named login token.
++   * @param label - operator-supplied name.
++   * @param now - creation time in epoch milliseconds.
++   * @returns the created token, secret included.
++   */
++  createToken(label: string, now: number): StoredToken {
++    const token: StoredToken = { id: mintId(), label, secret: mintSecret(), createdAt: now }
++    this.commit({ ...this.state, tokens: [...this.state.tokens, token] })
++    return token
++  }
++
++  /**
++   * Drop a token. Devices it authorized are revoked with it, because a device
++   * whose token is gone can no longer be explained in the settings list.
++   * @param id - token id to drop.
++   * @param now - revocation time in epoch milliseconds.
++   * @returns true when a token was dropped.
++   */
++  revokeToken(id: string, now: number): boolean {
++    const token = this.state.tokens.find(entry => entry.id === id)
++    if (token === undefined) return false
++    this.commit({
++      ...this.state,
++      tokens: this.state.tokens.filter(entry => entry.id !== id),
++      devices: this.state.devices.map(device =>
++        device.tokenId === id && device.revokedAt === undefined ? { ...device, revokedAt: now } : device),
++    })
++    return true
++  }
++
++  /**
++   * Record a successful token exchange.
++   * @param id - token id that was presented.
++   * @param now - exchange time in epoch milliseconds.
++   */
++  noteTokenUse(id: string, now: number): void {
++    this.commit({
++      ...this.state,
++      tokens: this.state.tokens.map(token =>
++        token.id === id ? { ...token, lastUsedAt: now } : token),
++    })
++  }
++
++  /**
++   * Add the device one successful cookie exchange created.
++   * @param registration - facts gathered from the authenticating request.
++   * @returns the created device.
++   */
++  registerDevice(registration: DeviceRegistration): StoredDevice {
++    const device: StoredDevice = {
++      id: mintId(),
++      createdAt: registration.createdAt,
++      lastSeenAt: registration.createdAt,
++      expiresAt: registration.expiresAt,
++      ...registration.tokenId === undefined ? {} : { tokenId: registration.tokenId },
++      ...registration.userAgent === undefined ? {} : { userAgent: registration.userAgent },
++      ...registration.address === undefined ? {} : { address: registration.address },
++    }
++    this.commit({ ...this.state, devices: [...this.state.devices, device] })
++    return device
++  }
++
++  /**
++   * Record authenticated activity, keeping the stored timestamp coarse enough
++   * that ordinary request traffic does not rewrite the record.
++   * @param id - device id carried by the session cookie.
++   * @param now - request time in epoch milliseconds.
++   * @param threshold - smallest advance worth persisting, in milliseconds.
++   */
++  touchDevice(id: string, now: number, threshold: number): void {
++    const device = this.device(id)
++    if (device === undefined || device.revokedAt !== undefined) return
++    if (now - device.lastSeenAt < threshold) return
++    this.commit({
++      ...this.state,
++      devices: this.state.devices.map(entry =>
++        entry.id === id ? { ...entry, lastSeenAt: now } : entry),
++    })
++  }
++
++  /**
++   * Set or clear one device's operator-supplied name.
++   * @param id - device id to rename.
++   * @param label - new name; undefined clears it.
++   * @returns true when a device was renamed.
++   */
++  renameDevice(id: string, label: string | undefined): boolean {
++    if (this.device(id) === undefined) return false
++    this.commit({
++      ...this.state,
++      devices: this.state.devices.map((device) => {
++        if (device.id !== id) return device
++        const { label: _dropped, ...rest } = device
++        return label === undefined ? rest : { ...rest, label }
++      }),
++    })
++    return true
++  }
++
++  /**
++   * Revoke one device, refusing its cookies from the next request onward.
++   * @param id - device id to revoke.
++   * @param now - revocation time in epoch milliseconds.
++   * @returns true when a device was revoked.
++   */
++  revokeDevice(id: string, now: number): boolean {
++    const device = this.device(id)
++    if (device === undefined || device.revokedAt !== undefined) return false
++    this.commit({
++      ...this.state,
++      devices: this.state.devices.map(entry =>
++        entry.id === id ? { ...entry, revokedAt: now } : entry),
++    })
++    return true
++  }
++
++  /**
++   * Drop devices whose cookie lifetime already ended, so the list does not
++   * accumulate rows nothing can present.
++   * @param now - current time in epoch milliseconds.
++   * @returns number of devices dropped.
++   */
++  pruneExpired(now: number): number {
++    const kept = this.state.devices.filter(device => device.expiresAt > now)
++    const dropped = this.state.devices.length - kept.length
++    if (dropped > 0) this.commit({ ...this.state, devices: kept })
++    return dropped
++  }
++
++  /**
++   * Wait for every queued write to settle, so a caller that answered a Remote
++   * call can be sure the record it describes is on disk.
++   * @returns after the write queue drains.
++   */
++  async settled(): Promise<void> {
++    await this.writes
++  }
++
++  /** Publish one new state in memory and enqueue its persistence. */
++  private commit(next: StoredAccess): void {
++    this.state = next
++    this.writes = this.writes.then(async () => {
++      await this.credentials.modifyRecord(ACCESS_RECORD_KEY, () =>
++        Promise.resolve({ kind: 'grant', payload: next }))
++      this.writeFailure = undefined
++    }).catch((error: unknown) => {
++      // Authentication already accepted the change in memory; a failed write
++      // is reported as damage rather than rejected, and the next write retries
++      // from the newest state.
++      this.writeFailure = error instanceof Error ? error.message : String(error)
++    })
++  }
++}
+diff --git a/packages/client/connection/src/browser-auth.ts b/packages/client/connection/src/browser-auth.ts
+index 10353d9..b393996 100644
+--- a/packages/client/connection/src/browser-auth.ts
++++ b/packages/client/connection/src/browser-auth.ts
+@@ -3,6 +3,8 @@
+ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+ import { credentialKey } from '@deepseek-ai/dsh-credentials'
+ import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
++import { BrowserAccessDirectory } from './browser-access.ts'
++import type { StoredToken } from './access-types.ts'
+ import type {
+   ConnectionIndexRequest,
+   ConnectionIndexResponse,
+@@ -14,10 +16,14 @@ const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
+ const SECRET_BYTES = 32
+ const TOKEN_QUERY = 'token'
+ const COOKIE_PREFIX = 'dsh-auth-'
+-const COOKIE_PAYLOAD_VERSION = 1
++/** Cookies minted before devices were recorded carry no device id. */
++const LEGACY_COOKIE_PAYLOAD_VERSION = 1
++const COOKIE_PAYLOAD_VERSION = 2
+ const STORED_SECRET_VERSION = 1
+ const BASE64URL_PATTERN = /^[A-Za-z0-9_-]*$/
+ const PROCESS_LAUNCH_TOKENS = new WeakMap<object, string>()
++/** Smallest stored advance in a device's last-seen time. */
++const TOUCH_INTERVAL_MILLISECONDS = 5 * 60 * 1000
+ 
+ interface StoredSecretPayload {
+   readonly version: typeof STORED_SECRET_VERSION
+@@ -25,10 +31,17 @@ interface StoredSecretPayload {
+ }
+ 
+ interface BrowserCookiePayload {
+-  readonly version: typeof COOKIE_PAYLOAD_VERSION
++  readonly version: number
+   readonly authority: string
+   readonly issuedAt: number
+   readonly expiresAt: number
++  /** Device this cookie belongs to; absent on legacy cookies. */
++  readonly deviceId?: string
++}
++
++/** What one presented token matched: the process launch token, or a stored one. */
++interface PresentedTokenMatch {
++  readonly tokenId?: string
+ }
+ 
+ function isRecord(value: unknown): value is Record<string, unknown> {
+@@ -77,6 +90,19 @@ function requestAuthority(headers: ConnectionTrustRequest['headers']): string |
+   }
+ }
+ 
++/**
++ * Client address recorded at device creation. The deployment sits behind a
++ * reverse proxy, so the forwarded headers are the only real peer address.
++ * @param headers - authenticating request headers.
++ * @returns the first forwarded address, or the proxy-reported one.
++ */
++function forwardedAddress(headers: ConnectionTrustRequest['headers']): string | undefined {
++  const forwarded = header(headers, 'x-forwarded-for')?.split(',')[0]?.trim()
++  if (forwarded !== undefined && forwarded !== '') return forwarded
++  const real = header(headers, 'x-real-ip')
++  return real === undefined || real === '' ? undefined : real
++}
++
+ function canonicalSecret(value: unknown): Buffer | undefined {
+   if (typeof value !== 'string') return undefined
+   const decoded = decodeBase64Url(value)
+@@ -151,11 +177,26 @@ function decodeCookie(value: string, secret: Buffer): BrowserCookiePayload | und
+     return undefined
+   }
+   if (!isRecord(decoded)
+-    || decoded.version !== COOKIE_PAYLOAD_VERSION
+-    || typeof decoded.authority !== 'string'
+     || !Number.isSafeInteger(decoded.issuedAt)
+-    || !Number.isSafeInteger(decoded.expiresAt)) return undefined
+-  return decoded as unknown as BrowserCookiePayload
++    || !Number.isSafeInteger(decoded.expiresAt)
++    || typeof decoded.authority !== 'string') return undefined
++  const cookieVersion = decoded.version
++  if (cookieVersion === LEGACY_COOKIE_PAYLOAD_VERSION) {
++    return {
++      version: LEGACY_COOKIE_PAYLOAD_VERSION,
++      authority: decoded.authority,
++      issuedAt: decoded.issuedAt as number,
++      expiresAt: decoded.expiresAt as number,
++    }
++  }
++  if (cookieVersion !== COOKIE_PAYLOAD_VERSION || typeof decoded.deviceId !== 'string') return undefined
++  return {
++    version: COOKIE_PAYLOAD_VERSION,
++    authority: decoded.authority,
++    issuedAt: decoded.issuedAt as number,
++    expiresAt: decoded.expiresAt as number,
++    deviceId: decoded.deviceId,
++  }
+ }
+ 
+ async function initializeSecret(credentials: CredentialProvider): Promise<Buffer> {
+@@ -190,6 +231,8 @@ export class BrowserAuth {
+     processOwner: object,
+     private readonly secret: Buffer,
+     maxAgeDays: number,
++    /** Named login tokens and the devices they authorized. */
++    readonly access: BrowserAccessDirectory,
+   ) {
+     this.launchToken = processLaunchToken(processOwner)
+     this.maxAgeMilliseconds = maxAgeDays * DAY_MILLISECONDS
+@@ -200,8 +243,8 @@ export class BrowserAuth {
+   }
+ 
+   /**
+-   * Initialize browser authentication and create its durable signing secret
+-   * when this Harness home has none.
++   * Initialize browser authentication, creating the durable signing secret and
++   * the access directory when this Harness home has neither.
+    * @param processOwner - root application context retaining one token across Connection reloads.
+    * @param credentials - persistent credential provider for the Web profile.
+    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
+@@ -212,11 +255,15 @@ export class BrowserAuth {
+     credentials: CredentialProvider,
+     maxAgeDays: number,
+   ): Promise<BrowserAuth> {
+-    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays)
++    const access = await BrowserAccessDirectory.load(credentials)
++    access.pruneExpired(Date.now())
++    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, access)
+   }
+ 
+   /**
+-   * Add this process's launch token to the ordinary application root URL.
++   * Add this process's launch token to the ordinary application root URL. This
++   * URL is the recovery entry: it works whether or not the access directory is
++   * readable, so an operator can always reach Settings and repair it.
+    * @param baseUrl - canonical browser origin without credentials.
+    * @returns root URL carrying the process token as its sole authentication input.
+    */
+@@ -230,9 +277,9 @@ export class BrowserAuth {
+   }
+ 
+   /**
+-   * Authenticate an index request. A valid root query token mints the cookie
+-   * and redirects to clean `/`; a valid cookie lets the caller serve the
+-   * index; every other request receives the same minimal 401 response.
++   * Authenticate an index request. A valid root query token mints the device
++   * and its cookie and redirects to clean `/`; a valid cookie lets the caller
++   * serve the index; every other request receives the same minimal 401 response.
+    * @param req - incoming root or configured-index request.
+    * @param res - response owned when this method returns false.
+    * @returns true only when the caller may serve index.html.
+@@ -244,25 +291,12 @@ export class BrowserAuth {
+     if (tokens.length > 0) {
+       const authority = requestAuthority(req.headers)
+       if (req.method === 'GET' && url.pathname === '/' && tokens.length === 1
+-        && authority !== undefined && tokenMatches(tokens.join(''), this.launchToken)) {
+-        const issuedAt = Date.now()
+-        const expiresAt = issuedAt + this.maxAgeMilliseconds
+-        const value = encodeCookie({
+-          version: COOKIE_PAYLOAD_VERSION,
+-          authority,
+-          issuedAt,
+-          expiresAt,
+-        }, this.secret)
+-        res.writeHead(303, {
+-          'cache-control': 'no-store',
+-          'location': '/',
+-          'referrer-policy': 'no-referrer',
+-          'set-cookie': sessionCookie(
+-            cookieName(authority), value, expiresAt, Math.floor(this.maxAgeMilliseconds / 1000),
+-          ),
+-        })
+-        res.end()
+-        return false
++        && authority !== undefined) {
++        const matched = this.matchPresentedToken(tokens.join(''))
++        if (matched !== undefined) {
++          this.mintSession(req, res, authority, matched)
++          return false
++        }
+       }
+       if (req.method === 'GET' && url.pathname === '/' && this.isAuthenticated(req)) {
+         res.writeHead(303, {
+@@ -282,9 +316,10 @@ export class BrowserAuth {
+   }
+ 
+   /**
+-   * Verify the authority-bound browser cookie on a Host request.
++   * Verify the authority-bound browser cookie on a Host request, and record the
++   * activity on the device it names.
+    * @param request - request headers carrying Host and Cookie.
+-   * @returns true only for an unexpired cookie signed by this activation's loaded secret.
++   * @returns true only for an unexpired, unrevoked cookie signed by this activation's loaded secret.
+    */
+   isAuthenticated(request: ConnectionTrustRequest): boolean {
+     const authority = requestAuthority(request.headers)
+@@ -295,10 +330,69 @@ export class BrowserAuth {
+     const payload = decodeCookie(value, this.secret)
+     if (payload === undefined || payload.authority !== authority) return false
+     const now = Date.now()
+-    return payload.issuedAt <= now
+-      && payload.expiresAt > now
+-      && payload.expiresAt > payload.issuedAt
+-      && payload.expiresAt - payload.issuedAt <= this.maxAgeMilliseconds
++    if (!(payload.issuedAt <= now)
++      || !(payload.expiresAt > now)
++      || !(payload.expiresAt > payload.issuedAt)
++      || payload.expiresAt - payload.issuedAt > this.maxAgeMilliseconds) return false
++    // A legacy cookie names no device: it predates the directory, so there is
++    // nothing to enforce and nothing to record.
++    if (payload.deviceId === undefined) return true
++    if (!this.access.deviceActive(payload.deviceId)) return false
++    this.access.touchDevice(payload.deviceId, now, TOUCH_INTERVAL_MILLISECONDS)
++    return true
++  }
++
++  /**
++   * Resolve one presented secret to the entry authorizing it.
++   * @param presented - secret from the root query.
++   * @returns the process launch token's empty match, a stored token's match, or undefined.
++   */
++  private matchPresentedToken(presented: string): PresentedTokenMatch | undefined {
++    if (tokenMatches(presented, this.launchToken)) return {}
++    // Every stored secret is compared, without an early exit, so the presented
++    // value cannot be narrowed by response timing.
++    let matched: StoredToken | undefined
++    for (const token of this.access.tokens()) {
++      if (tokenMatches(presented, token.secret)) matched = token
++    }
++    return matched === undefined ? undefined : { tokenId: matched.id }
++  }
++
++  /** Record the device one accepted token exchange created and set its cookie. */
++  private mintSession(
++    req: ConnectionIndexRequest,
++    res: ConnectionIndexResponse,
++    authority: string,
++    matched: PresentedTokenMatch,
++  ): void {
++    const issuedAt = Date.now()
++    const expiresAt = issuedAt + this.maxAgeMilliseconds
++    const userAgent = header(req.headers, 'user-agent')
++    const address = forwardedAddress(req.headers)
++    const device = this.access.registerDevice({
++      createdAt: issuedAt,
++      expiresAt,
++      ...matched.tokenId === undefined ? {} : { tokenId: matched.tokenId },
++      ...userAgent === undefined ? {} : { userAgent },
++      ...address === undefined ? {} : { address },
++    })
++    if (matched.tokenId !== undefined) this.access.noteTokenUse(matched.tokenId, issuedAt)
++    const value = encodeCookie({
++      version: COOKIE_PAYLOAD_VERSION,
++      authority,
++      issuedAt,
++      expiresAt,
++      deviceId: device.id,
++    }, this.secret)
++    res.writeHead(303, {
++      'cache-control': 'no-store',
++      'location': '/',
++      'referrer-policy': 'no-referrer',
++      'set-cookie': sessionCookie(
++        cookieName(authority), value, expiresAt, Math.floor(this.maxAgeMilliseconds / 1000),
++      ),
++    })
++    res.end()
+   }
+ 
+   private writeUnauthorized(req: ConnectionIndexRequest, res: ConnectionIndexResponse): void {
+diff --git a/packages/client/connection/src/index.ts b/packages/client/connection/src/index.ts
+index 98a4354..99c3e37 100644
+--- a/packages/client/connection/src/index.ts
++++ b/packages/client/connection/src/index.ts
+@@ -9,6 +9,7 @@ import { API_PATH } from './api-path.ts'
+ import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
+ import { assertTrustedAuthority } from './api-request-trust.ts'
+ import { BrowserAuth } from './browser-auth.ts'
++import { BrowserAccessController } from './access-controller.ts'
+ import { HostConnectionService } from './rpc-host.ts'
+ import { ConnectionRecoveryConfigSchema, resolveConnectionConfig, type ConnectionRecoveryConfig } from './recovery-config.ts'
+ 
+@@ -42,6 +43,11 @@ export {
+   serverResponseSchema,
+ } from './rpc-schema.ts'
+ export { HostConnectionService } from './rpc-host.ts'
++export { BrowserAccessController } from './access-controller.ts'
++export type {
++  AccessDeviceView, AccessDirectoryView, AccessMintedTokenView, AccessTokenView,
++  BrowserAccessHandle, StoredDevice, StoredToken,
++} from './access-types.ts'
+ 
+ export { API_PATH } from './api-path.ts'
+ 
+@@ -116,6 +122,7 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
+     trustedHosts,
+     await BrowserAuth.create(ctx.root, ctx.credentials, cookieMaxAgeDays),
+   )
++  ctx.plugin(BrowserAccessController)
+   ctx.inject(['webServer'], (webCtx) => {
+     assertImageBodyCapacity(webCtx, maxRequestBodyBytes)
+     webCtx.on('webserver/index-inject', (table) => {
+diff --git a/packages/client/connection/src/rpc-host.ts b/packages/client/connection/src/rpc-host.ts
+index d74734e..464f376 100644
+--- a/packages/client/connection/src/rpc-host.ts
++++ b/packages/client/connection/src/rpc-host.ts
+@@ -12,6 +12,7 @@ import { bridge } from './http-bridge.ts'
+ import { isTrustedApiRequest } from './api-request-trust.ts'
+ import { API_PATH } from './api-path.ts'
+ import type { BrowserAuth } from './browser-auth.ts'
++import type { BrowserAccessHandle } from './access-types.ts'
+ import type {
+   ConnectionIndexRequest,
+   ConnectionIndexResponse,
+@@ -109,6 +110,11 @@ export class HostConnectionService extends Service implements HostConnectionHand
+     return this.browserAuth.authenticatedUrl(baseUrl)
+   }
+ 
++  /** Named login tokens and the devices they authorized. */
++  get access(): BrowserAccessHandle {
++    return this.browserAuth.access
++  }
++
+   /**
+    * Compose one shared-channel Fetch handler from exact routes and its interceptor.
+    * @param channel - shared channel mounted by Connection.
+diff --git a/packages/client/connection/src/rpc.ts b/packages/client/connection/src/rpc.ts
+index 9474d72..e924fef 100644
+--- a/packages/client/connection/src/rpc.ts
++++ b/packages/client/connection/src/rpc.ts
+@@ -1,6 +1,7 @@
+ /** Generic unary RPC contracts shared by the Host and Client Connection halves. */
+ 
+ import type { Branded } from '@deepseek-ai/dsh-brand'
++import type { BrowserAccessHandle } from './access-types.ts'
+ 
+ /** Correlation id minted by a caller and echoed by the Connection response. */
+ export type RpcId = Branded<'rpc-id'>
+@@ -197,6 +198,13 @@ export interface HostConnectionHandle {
+    * @returns root URL accepted by {@link authorizeIndex} for initial login.
+    */
+   authenticatedUrl(baseUrl: string): string
++
++  /**
++   * Named login tokens and the devices they authorized. Connection owns the
++   * instance because authentication reads the same in-memory state
++   * synchronously; the access controller only needs this surface.
++   */
++  readonly access: BrowserAccessHandle
+ }
+ 
+ /** Transport-independent Fetch handler used by HTTP and worker carriers. */
+diff --git a/packages/client/connection/tests/browser-access.host.spec.ts b/packages/client/connection/tests/browser-access.host.spec.ts
+new file mode 100644
+index 0000000..55021a9
+--- /dev/null
++++ b/packages/client/connection/tests/browser-access.host.spec.ts
+@@ -0,0 +1,200 @@
++/** Durable browser-access directory and device-bound session cookies. */
++
++import { describe, expect, it } from 'vitest'
++import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
++import { BrowserAccessDirectory } from '../src/browser-access.ts'
++import { BrowserAuth } from '../src/browser-auth.ts'
++import type { ConnectionIndexRequest, ConnectionIndexResponse } from '../src/rpc.ts'
++import { RecordCredentials } from './browser-credentials.ts'
++
++const NOW = 1_700_000_000_000
++const DAY = 24 * 60 * 60 * 1000
++
++function credentials(store: RecordCredentials): CredentialProvider {
++  return store as unknown as CredentialProvider
++}
++
++interface ResponseState {
++  status?: number
++  headers?: Readonly<Record<string, string>>
++}
++
++function response(): { value: ConnectionIndexResponse; state: ResponseState } {
++  const state: ResponseState = {}
++  return {
++    value: {
++      writeHead(status, headers) {
++        state.status = status
++        if (headers !== undefined) state.headers = headers
++      },
++      end() {},
++    },
++    state,
++  }
++}
++
++function request(url: string, authority = '127.0.0.1:3080', init?: {
++  cookie?: string
++  method?: string
++  userAgent?: string
++}): ConnectionIndexRequest {
++  return {
++    method: init?.method ?? 'GET',
++    url,
++    headers: {
++      host: authority,
++      ...init?.cookie === undefined ? {} : { cookie: init.cookie },
++      ...init?.userAgent === undefined ? {} : { 'user-agent': init.userAgent },
++    },
++  }
++}
++
++/** Exchange one login URL and return the session cookie it set, without its attributes. */
++function exchange(auth: BrowserAuth, url: string, authority = '127.0.0.1:3080'): string {
++  const target = new URL(url)
++  const res = response()
++  expect(auth.authorizeIndex(request(`${target.pathname}${target.search}`, authority), res.value)).toBe(false)
++  const setCookie = res.state.headers?.['set-cookie']
++  if (setCookie === undefined) throw new Error('exchange did not set a session cookie')
++  return setCookie.split(';', 1)[0]!
++}
++
++describe('BrowserAccessDirectory', () => {
++  it('starts empty when this Harness home stored none', async () => {
++    const directory = await BrowserAccessDirectory.load(credentials(new RecordCredentials()))
++    expect(directory.tokens()).toEqual([])
++    expect(directory.devices()).toEqual([])
++    expect(directory.damaged).toBeUndefined()
++    expect(directory.unenforceable).toBe(false)
++  })
++
++  it('reads back a token it created, through storage', async () => {
++    const store = new RecordCredentials()
++    const first = await BrowserAccessDirectory.load(credentials(store))
++    const token = first.createToken('Office PC', NOW)
++    await first.settled()
++
++    const second = await BrowserAccessDirectory.load(credentials(store))
++    expect(second.tokenBySecret(token.secret)?.id).toBe(token.id)
++    expect(second.tokens()).toHaveLength(1)
++  })
++
++  it('revokes the devices a dropped token authorized', async () => {
++    const directory = await BrowserAccessDirectory.load(credentials(new RecordCredentials()))
++    const token = directory.createToken('Office PC', NOW)
++    const device = directory.registerDevice({ tokenId: token.id, createdAt: NOW, expiresAt: NOW + DAY })
++    expect(directory.deviceActive(device.id)).toBe(true)
++
++    expect(directory.revokeToken(token.id, NOW + 1)).toBe(true)
++    expect(directory.deviceActive(device.id)).toBe(false)
++    expect(directory.tokens()).toEqual([])
++  })
++
++  it('refuses a revoked device and reports an unknown one as inactive', async () => {
++    const directory = await BrowserAccessDirectory.load(credentials(new RecordCredentials()))
++    const device = directory.registerDevice({ createdAt: NOW, expiresAt: NOW + DAY })
++    expect(directory.revokeDevice(device.id, NOW + 1)).toBe(true)
++    expect(directory.revokeDevice(device.id, NOW + 2)).toBe(false)
++    expect(directory.deviceActive(device.id)).toBe(false)
++    expect(directory.deviceActive('never-recorded')).toBe(false)
++  })
++
++  it('prunes devices whose cookie lifetime already ended', async () => {
++    const directory = await BrowserAccessDirectory.load(credentials(new RecordCredentials()))
++    directory.registerDevice({ createdAt: NOW, expiresAt: NOW + DAY })
++    const stale = directory.registerDevice({ createdAt: NOW, expiresAt: NOW + 1 })
++    expect(directory.pruneExpired(NOW + 2)).toBe(1)
++    expect(directory.device(stale.id)).toBeUndefined()
++  })
++
++  it('keeps the newest name when renaming, and clears it with undefined', async () => {
++    const directory = await BrowserAccessDirectory.load(credentials(new RecordCredentials()))
++    const device = directory.registerDevice({ createdAt: NOW, expiresAt: NOW + DAY })
++    expect(directory.renameDevice(device.id, 'MacBook')).toBe(true)
++    expect(directory.device(device.id)?.label).toBe('MacBook')
++    expect(directory.renameDevice(device.id, undefined)).toBe(true)
++    expect(directory.device(device.id)?.label).toBeUndefined()
++    expect(directory.renameDevice('missing', 'x')).toBe(false)
++  })
++
++  it('degrades to an empty, unenforceable directory when storage is unreadable', async () => {
++    const store = new RecordCredentials()
++    store.record = { kind: 'grant', payload: { version: 99, tokens: [], devices: [] } }
++    const directory = await BrowserAccessDirectory.load(credentials(store))
++    expect(directory.damaged).toBeDefined()
++    expect(directory.unenforceable).toBe(true)
++    // An unreadable directory must not lock every browser out of the GUI.
++    expect(directory.deviceActive('anything')).toBe(true)
++  })
++
++  it('records device activity only past the write threshold', async () => {
++    const directory = await BrowserAccessDirectory.load(credentials(new RecordCredentials()))
++    const device = directory.registerDevice({ createdAt: NOW, expiresAt: NOW + DAY })
++    directory.touchDevice(device.id, NOW + 1000, 60_000)
++    expect(directory.device(device.id)?.lastSeenAt).toBe(NOW)
++    directory.touchDevice(device.id, NOW + 120_000, 60_000)
++    expect(directory.device(device.id)?.lastSeenAt).toBe(NOW + 120_000)
++  })
++})
++
++describe('BrowserAuth access directory', () => {
++  it('accepts a stored token, and binds the session to a device', async () => {
++    const store = new RecordCredentials()
++    const auth = await BrowserAuth.create({}, credentials(store), 30)
++    const token = auth.access.createToken('Office PC', NOW)
++
++    const cookie = exchange(auth, `http://127.0.0.1:3080/?token=${token.secret}`)
++    const devices = auth.access.devices()
++    expect(devices).toHaveLength(1)
++    expect(devices[0]?.tokenId).toBe(token.id)
++    expect(devices[0]?.userAgent).toBeUndefined()
++
++    expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie }))).toBe(true)
++    expect(auth.access.tokens()[0]?.lastUsedAt).toBeGreaterThan(0)
++  })
++
++  it('stops accepting the session once its device is revoked', async () => {
++    const auth = await BrowserAuth.create({}, credentials(new RecordCredentials()), 30)
++    const token = auth.access.createToken('Office PC', NOW)
++    const cookie = exchange(auth, `http://127.0.0.1:3080/?token=${token.secret}`)
++    expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie }))).toBe(true)
++
++    const device = auth.access.devices()[0]!
++    auth.access.revokeDevice(device.id, NOW + 1)
++    expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie }))).toBe(false)
++  })
++
++  it('refuses a secret no token owns', async () => {
++    const auth = await BrowserAuth.create({}, credentials(new RecordCredentials()), 30)
++    const res = response()
++    expect(auth.authorizeIndex(request('/?token=not-a-token'), res.value)).toBe(false)
++    expect(res.state.status).toBe(401)
++    expect(auth.access.devices()).toEqual([])
++  })
++
++  it('records the forwarded address at device creation', async () => {
++    const auth = await BrowserAuth.create({}, credentials(new RecordCredentials()), 30)
++    const token = auth.access.createToken('Office PC', NOW)
++    const target = new URL(`http://127.0.0.1:3080/?token=${token.secret}`)
++    const res = response()
++    auth.authorizeIndex({
++      method: 'GET',
++      url: `${target.pathname}${target.search}`,
++      headers: {
++        host: '127.0.0.1:3080',
++        'user-agent': 'Mozilla/5.0 (Macintosh) Chrome/120',
++        'x-forwarded-for': '192.168.169.55, 10.0.0.1',
++      },
++    }, res.value)
++    expect(auth.access.devices()[0]?.address).toBe('192.168.169.55')
++    expect(auth.access.devices()[0]?.userAgent).toContain('Chrome')
++  })
++
++  it('keeps the process launch token working regardless of the directory', async () => {
++    const auth = await BrowserAuth.create({}, credentials(new RecordCredentials()), 30)
++    const cookie = exchange(auth, auth.authenticatedUrl('http://127.0.0.1:3080'))
++    expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie }))).toBe(true)
++    // The launch token names no stored token, so its device carries no tokenId.
++    expect(auth.access.devices()[0]?.tokenId).toBeUndefined()
++  })
++})
+diff --git a/packages/client/connection/tests/browser-auth.host.spec.ts b/packages/client/connection/tests/browser-auth.host.spec.ts
+index 3f06672..2551a31 100644
+--- a/packages/client/connection/tests/browser-auth.host.spec.ts
++++ b/packages/client/connection/tests/browser-auth.host.spec.ts
+@@ -211,20 +211,25 @@ describe('BrowserAuth', () => {
+     const store = new RecordCredentials()
+     const auth = await createAuth(store)
+     const first = exchange(auth)
+-    expect(store).toMatchObject({ reads: 0, modifies: 1 })
++    await auth.access.settled()
++    // One read for the access directory, then the signing secret's write and
++    // the device the exchange recorded.
++    expect(store).toMatchObject({ reads: 1, modifies: 2 })
+ 
+     await store.deleteRecord()
+     expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie: first.cookie }))).toBe(true)
+     const sameActivation = exchange(auth)
+     expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie: sameActivation.cookie }))).toBe(true)
+-    expect(store).toMatchObject({ reads: 0, modifies: 1 })
++    await auth.access.settled()
++    expect(store).toMatchObject({ reads: 1, modifies: 3 })
+ 
+     const reactivated = await createAuth(store)
+     const second = exchange(reactivated)
+     expect(second.cookie).not.toBe(first.cookie)
+     expect(reactivated.isAuthenticated(request('/', '127.0.0.1:3080', { cookie: first.cookie }))).toBe(false)
+     expect(reactivated.isAuthenticated(request('/', '127.0.0.1:3080', { cookie: second.cookie }))).toBe(true)
+-    expect(store).toMatchObject({ reads: 0, modifies: 2 })
++    await reactivated.access.settled()
++    expect(store).toMatchObject({ reads: 2, modifies: 5 })
+   })
+ 
+   it('fails loud on an invalid owner record instead of replacing it', async () => {
+diff --git a/packages/client/connection/tests/browser-credentials.ts b/packages/client/connection/tests/browser-credentials.ts
+index 3739101..af128eb 100644
+--- a/packages/client/connection/tests/browser-credentials.ts
++++ b/packages/client/connection/tests/browser-credentials.ts
+@@ -1,31 +1,66 @@
+ import type { Context } from '@deepseek-ai/cordis'
+ import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
+ 
+-/** Mutable credential-record double for Connection authentication tests. */
++/** Key standing for the single record a spec seeded through {@link RecordCredentials.record}. */
++const SEEDED = '\u0000seeded'
++
++/** Credential-key text; the seam's key is a branded string. */
++function keyText(key: unknown): string {
++  return typeof key === 'string' ? key : String(key)
++}
++
++/**
++ * Mutable credential-record double for Connection authentication tests. It
++ * keeps one record per key, and the `record` accessors address a seeded
++ * single record so a spec that owns exactly one key reads and writes it
++ * without naming the key authentication happens to use.
++ */
+ export class RecordCredentials {
+-  record: CredentialRecord | undefined
++  private readonly records = new Map<string, CredentialRecord>()
+   discardWrites = false
+   reads = 0
+   modifies = 0
+ 
+-  readRecord(): Promise<CredentialRecord | undefined> {
++  /** The spec-seeded record, or the sole stored record when no seed is set. */
++  get record(): CredentialRecord | undefined {
++    const seeded = this.records.get(SEEDED)
++    if (seeded !== undefined) return seeded
++    return this.records.values().next().value
++  }
++
++  set record(value: CredentialRecord | undefined) {
++    this.records.delete(SEEDED)
++    if (value === undefined) {
++      this.records.clear()
++      return
++    }
++    this.records.set(SEEDED, value)
++  }
++
++  readRecord(key: unknown): Promise<CredentialRecord | undefined> {
+     this.reads += 1
+-    return Promise.resolve(this.record)
++    return Promise.resolve(this.records.get(SEEDED) ?? this.records.get(keyText(key)))
+   }
+ 
+   async modifyRecord(
+-    _key: unknown,
++    key: unknown,
+     mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>,
+   ): Promise<CredentialRecord | undefined> {
+     this.modifies += 1
+-    const next = await mutate(this.record)
++    const address = this.records.has(SEEDED) ? SEEDED : keyText(key)
++    const next = await mutate(this.records.get(address))
+     if (this.discardWrites) return undefined
+-    if (next !== undefined) this.record = next
+-    return this.record
++    if (next !== undefined) this.records.set(address, next)
++    return this.records.get(address)
+   }
+ 
+-  deleteRecord(): Promise<void> {
+-    this.record = undefined
++  deleteRecord(key?: unknown): Promise<void> {
++    if (key === undefined) {
++      // Spec-facing single-record call: drop whichever record `record` reads.
++      if (!this.records.delete(SEEDED)) this.records.clear()
++      return Promise.resolve()
++    }
++    this.records.delete(keyText(key))
+     return Promise.resolve()
+   }
+ }
+diff --git a/packages/client/connection/tsconfig.client.json b/packages/client/connection/tsconfig.client.json
+index 4266a1d..98036e0 100644
+--- a/packages/client/connection/tsconfig.client.json
++++ b/packages/client/connection/tsconfig.client.json
+@@ -6,6 +6,7 @@
+     "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+   },
+   "files": [
++    "src/access-types.ts",
+     "src/api-path.ts",
+     "src/client/api.ts",
+     "src/client/connection.ts",
+diff --git a/packages/client/connection/tsconfig.host.json b/packages/client/connection/tsconfig.host.json
+index f58ca85..6bae85d 100644
+--- a/packages/client/connection/tsconfig.host.json
++++ b/packages/client/connection/tsconfig.host.json
+@@ -6,8 +6,11 @@
+     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+   },
+   "files": [
++    "src/access-controller.ts",
++    "src/access-types.ts",
+     "src/api-path.ts",
+     "src/api-request-trust.ts",
++    "src/browser-access.ts",
+     "src/browser-auth.ts",
+     "src/http-bridge.ts",
+     "src/index.ts",
+@@ -36,6 +39,9 @@
+     {
+       "path": "../../host/webserver"
+     },
++    {
++      "path": "../../typert/protocol"
++    },
+     {
+       "path": "../../util/brand"
+     }
+diff --git a/packages/client/ui-settings-access/README.i18n.yaml b/packages/client/ui-settings-access/README.i18n.yaml
+new file mode 100644
+index 0000000..dd2f06f
+--- /dev/null
++++ b/packages/client/ui-settings-access/README.i18n.yaml
+@@ -0,0 +1,6 @@
++# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
++# side as of the last confirmed-consistent state. Both languages carry equal authority;
++# after editing either side, bring the other along and re-record with:
++#   pnpm run verify-translation-pairing --write packages/client/ui-settings-access/README.md
++README.md: 0703f2b503b30c6d646a1c32af172245ec345060
++README.zh.md: a3939e2ce52cf5eac6fb2de79450b1bc047d0f3a
+diff --git a/packages/client/ui-settings-access/README.md b/packages/client/ui-settings-access/README.md
+new file mode 100644
+index 0000000..0703f2b
+--- /dev/null
++++ b/packages/client/ui-settings-access/README.md
+@@ -0,0 +1,47 @@
++---
++description: "Access settings section for the Web GUI: named login tokens and the browser devices they authorized; for operators enrolling and retiring browsers."
++kind: "package-reference"
++---
++
++# @deepseek-ai/dsh-client-ui-settings-access
++
++English | [中文](README.zh.md)
++
++## Summary
++
++Use this package to enroll and retire the browsers that may sign in to this DeepSeek Harness. The Access page mints one named login token per device, shows the link to open on that device, lists every browser session the Host recorded, and revokes either one device or a whole token together with the devices it authorized. A token's secret appears exactly once, in the answer to the mint that created it; every other view is redacted.
++
++## Table of Contents
++
++- [Use this package](#use-this-package)
++- [Understand the implementation](#understand-the-implementation)
++- [Model Experience](#model-experience)
++- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
++
++## Use this package
++
++Open Settings and choose **Access**. The page holds two lists.
++
++### Login tokens
++
++Type a name for the new device and choose **New token**. The page answers with the one-time login link; copy it to the new device and open it there. That device exchanges the secret for a thirty-day session cookie and appears in the device list below. Revoking a token drops it and revokes every device it authorized.
++
++### Devices
++
++Every browser session the Host recorded is listed with its authorizing token, its reported browser and address, and its first-seen, last-active, and expiry times. **Rename** gives a device a name of your own; **Sign out** revokes it, and its next request is refused with 401.
++
++## Understand the implementation
++
++The section keeps no client-side storage of its own: every action calls the Host `browserAccess` Remote namespace, which reads and writes the same in-memory directory that connection authentication enforces. The Host persists tokens and devices in one credential record (`client-connection/browser-access`) and updates its in-memory copy first, so a synchronous cookie check never waits on storage.
++
++The process launch token printed by `dsh web` sits deliberately outside this directory. It keeps working even when the stored directory is unreadable, which is what lets an operator reach this page and repair it; a damaged directory is reported above the lists, and revoke stops taking effect rather than every browser being locked out.
++
++## Model Experience
++
++This package changes no model-visible input, no tool schema, and no prompt text. It adds no session event and no token to any request, so it has no effect on KV-cache reuse.
++
++## Known Limitations and Deferred Work
++
++- A session cookie minted before this page existed carries no device id. It keeps working as an unmanaged session and cannot be listed or revoked; signing in again through a token produces a manageable device.
++- The login link is shown once, at mint time. Recovering a lost link means minting another token.
++- Token secrets and the cookie signing secret are both stored in plaintext in the Host credential store, at the same trust level as the rest of that file.
+diff --git a/packages/client/ui-settings-access/README.zh.md b/packages/client/ui-settings-access/README.zh.md
+new file mode 100644
+index 0000000..a3939e2
+--- /dev/null
++++ b/packages/client/ui-settings-access/README.zh.md
+@@ -0,0 +1,47 @@
++---
++description: "Web GUI 的访问管理设置页：命名登录令牌与它们授权的浏览器设备；面向登记和清退浏览器的运维者。"
++kind: "package-reference"
++---
++
++# @deepseek-ai/dsh-client-ui-settings-access
++
++[English](README.md) | 中文
++
++## Summary
++
++用这个包登记和清退可以登录这台 DeepSeek Harness 的浏览器。访问管理页为每台设备签发一个命名登录令牌，给出在该设备上打开的链接，列出 Host 记录的全部浏览器会话，并支持吊销一台设备、或吊销一个令牌连同它授权的设备。令牌密钥只在创建它的那次应答里出现一次，其余视图一律脱敏。
++
++## Table of Contents
++
++- [Use this package](#use-this-package)
++- [Understand the implementation](#understand-the-implementation)
++- [Model Experience](#model-experience)
++- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
++
++## Use this package
++
++打开设置，选择 **访问管理**。页面上有两个列表。
++
++### 登录令牌
++
++输入新设备的名称并点 **新增令牌**。页面给出一次性登录链接；把它复制到新设备上打开。该设备用密钥换取 30 天会话 cookie，并出现在下方的设备列表中。吊销一个令牌会删除它，并吊销它授权的全部设备。
++
++### 登录设备
++
++Host 记录的每个浏览器会话都会列出，包含其来源令牌、上报的浏览器与地址，以及首次登录、最近活跃和有效期时间。**重命名** 可以给设备起自己的名字；**退出登录** 会吊销它，它之后的下一个请求会被 401 拒绝。
++
++## Understand the implementation
++
++本页自身不做任何客户端存储：每个动作都调用 Host 的 `browserAccess` Remote 命名空间，它读写的是连接认证所强制执行的同一份内存目录。Host 把令牌与设备持久化在一个凭证记录（`client-connection/browser-access`）里，并先更新内存副本，因此同步的 cookie 校验从不等存储。
++
++`dsh web` 打印的进程级应急令牌刻意放在这份目录之外。即使存储的目录读不出来，它依然有效——这正是运维者还能进入本页去修复它的原因；目录损坏时会在列表上方报出，吊销随之失效，而不是把所有浏览器锁在门外。
++
++## Model Experience
++
++本包不改变任何模型可见输入、工具 schema 或提示词文本，也不新增会话事件或请求 token，因此对 KV-cache 复用没有影响。
++
++## Known Limitations and Deferred Work
++
++- 在本页出现之前签发的会话 cookie 不带设备 id。它作为「未托管会话」继续有效，既不能被列出也不能被吊销；用令牌重新登录一次即可得到可管理的设备。
++- 登录链接只在创建时显示一次。链接丢了就再签发一个令牌。
++- 令牌密钥与 cookie 签名密钥都以明文存放在 Host 凭证库里，与该文件其余内容的信任级别相同。
+diff --git a/packages/client/ui-settings-access/package.json b/packages/client/ui-settings-access/package.json
+new file mode 100644
+index 0000000..c235c88
+--- /dev/null
++++ b/packages/client/ui-settings-access/package.json
+@@ -0,0 +1,62 @@
++{
++  "name": "@deepseek-ai/dsh-client-ui-settings-access",
++  "description": "Access settings section: named login tokens and the browser devices they authorized",
++  "version": "0.1.5-rc.2",
++  "publishConfig": {
++    "access": "public"
++  },
++  "repository": {
++    "type": "git",
++    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
++    "directory": "packages/client/ui-settings-access"
++  },
++  "type": "module",
++  "main": "lib/index.js",
++  "types": "lib/types/index.d.ts",
++  "exports": {
++    ".": {
++      "types": "./lib/types/index.d.ts",
++      "default": "./lib/index.js"
++    },
++    "./client": {
++      "types": "./lib/types/client/index.d.ts",
++      "default": "./lib/client.js"
++    },
++    "./src/*": "./src/*",
++    "./package.json": "./package.json"
++  },
++  "dsh": {
++    "client": {
++      "inject": [
++        "@deepseek-ai/dsh-api-remotes",
++        "@deepseek-ai/dsh-client-locale",
++        "@deepseek-ai/dsh-client-ui-settings"
++      ],
++      "platform": "web"
++    }
++  },
++  "scripts": {
++    "bundle": "tsdown",
++    "watch": "tsdown --watch"
++  },
++  "license": "MIT",
++  "peerDependencies": {
++    "@deepseek-ai/cordis": "workspace:^"
++  },
++  "devDependencies": {
++    "@deepseek-ai/cordis": "workspace:^",
++    "@deepseek-ai/dsh-api-remotes": "workspace:^",
++    "@deepseek-ai/dsh-client-locale": "workspace:^",
++    "@deepseek-ai/dsh-client-test-runtime": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
++    "@types/react": "~18.3.1",
++    "react": "^18.2.0"
++  },
++  "files": [
++    "lib/index.js",
++    "lib/client.js",
++    "lib/types/**/*.d.ts"
++  ]
++}
+diff --git a/packages/client/ui-settings-access/src/client/AccessSettingsSection.module.css b/packages/client/ui-settings-access/src/client/AccessSettingsSection.module.css
+new file mode 100644
+index 0000000..fb51664
+--- /dev/null
++++ b/packages/client/ui-settings-access/src/client/AccessSettingsSection.module.css
+@@ -0,0 +1,140 @@
++/* Access settings section: token list plus device list. */
++
++.section {
++  display: flex;
++  flex-direction: column;
++  gap: 20px;
++  max-width: 760px;
++  color: var(--dsw-alias-label-primary);
++}
++
++.heading {
++  margin: 0;
++  font-size: 18px;
++  font-weight: 600;
++}
++
++.intro {
++  margin: 0;
++  font-size: 13px;
++  color: var(--dsw-alias-label-tertiary);
++}
++
++.warning {
++  margin: 0;
++  padding: 8px 10px;
++  border: 0.5px solid var(--dsw-alias-border-l4);
++  border-radius: 8px;
++  font-size: 12px;
++}
++
++.block {
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++}
++
++.blockHeading {
++  margin: 0;
++  font-size: 14px;
++  font-weight: 600;
++}
++
++.blockIntro {
++  margin: 0;
++  font-size: 12px;
++  color: var(--dsw-alias-label-tertiary);
++}
++
++.createRow {
++  display: flex;
++  gap: 8px;
++  align-items: center;
++}
++
++.minted {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  padding: 10px;
++  border: 0.5px solid var(--dsw-alias-border-l4);
++  border-radius: 8px;
++}
++
++.mintedLabel {
++  margin: 0;
++  font-size: 12px;
++}
++
++.link {
++  font-family: var(--dsw-font-family-mono, monospace);
++  font-size: 12px;
++  word-break: break-all;
++}
++
++.hint {
++  margin: 0;
++  font-size: 12px;
++  color: var(--dsw-alias-label-tertiary);
++}
++
++.list {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  margin: 0;
++  padding: 0;
++  list-style: none;
++}
++
++.row {
++  display: flex;
++  gap: 12px;
++  align-items: center;
++  padding: 10px 12px;
++  border: 0.5px solid var(--dsw-alias-border-l2);
++  border-radius: 10px;
++}
++
++.revoked {
++  opacity: 0.55;
++}
++
++.rowMain {
++  display: flex;
++  flex: 1;
++  flex-direction: column;
++  gap: 2px;
++  min-width: 0;
++}
++
++.rowTitle {
++  overflow: hidden;
++  font-size: 13px;
++  font-weight: 500;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.rowMeta {
++  font-size: 12px;
++  color: var(--dsw-alias-label-tertiary);
++}
++
++.rowActions {
++  display: flex;
++  gap: 6px;
++}
++
++.renameRow {
++  display: flex;
++  flex: 1;
++  gap: 6px;
++  align-items: center;
++}
++
++.empty {
++  margin: 0;
++  font-size: 12px;
++  color: var(--dsw-alias-label-tertiary);
++}
+diff --git a/packages/client/ui-settings-access/src/client/AccessSettingsSection.tsx b/packages/client/ui-settings-access/src/client/AccessSettingsSection.tsx
+new file mode 100644
+index 0000000..6abab07
+--- /dev/null
++++ b/packages/client/ui-settings-access/src/client/AccessSettingsSection.tsx
+@@ -0,0 +1,315 @@
++/**
++ * Access settings section: named login tokens and the browser devices they
++ * authorized. Every read and write goes to the Host directory through the
++ * injected face, and the section keeps only the answer it last received.
++ */
++
++import { useCallback, useEffect, useState } from 'react'
++import type {
++  AccessDeviceView, AccessDirectoryView, AccessMintedTokenView,
++} from '@deepseek-ai/dsh-api-remotes/client'
++import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
++import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
++import css from './AccessSettingsSection.module.css'
++
++/** Host calls the section performs against the browser-access directory. */
++export interface AccessSectionInjected {
++  /** Read the whole directory. */
++  load: () => Promise<AccessDirectoryView>
++  /** Mint one named token; its secret is answered exactly once. */
++  createToken: (label: string) => Promise<AccessMintedTokenView>
++  /** Drop one token and revoke the devices it authorized. */
++  revokeToken: (id: string) => Promise<AccessDirectoryView>
++  /** Set or clear one device's name. */
++  renameDevice: (id: string, label: string | undefined) => Promise<AccessDirectoryView>
++  /** Revoke one device. */
++  revokeDevice: (id: string) => Promise<AccessDirectoryView>
++}
++
++/** Props the renderer binds for the Access settings section. */
++export type AccessSettingsSectionProps =
++  PropsRuntime<'settings.section'>
++  & PropsLocale<'settings.access'>
++  & InjectFace<AccessSectionInjected>
++
++function messageOf(error: unknown): string {
++  return error instanceof Error ? error.message : String(error)
++}
++
++/** Absolute login URL carrying one minted secret. */
++function loginUrlFor(secret: string): string {
++  const origin = globalThis.location?.origin
++  const base = origin === undefined || origin === 'null' ? '' : origin
++  return `${base}/?token=${secret}`
++}
++
++/** Browser and platform names reported by one User-Agent, when recognisable. */
++function describeBrowser(userAgent: string | undefined): string | undefined {
++  if (userAgent === undefined) return undefined
++  const browser = /Edg\//u.test(userAgent) ? 'Edge'
++    : /OPR\//u.test(userAgent) ? 'Opera'
++      : /Firefox\//u.test(userAgent) ? 'Firefox'
++        : /Chrome\//u.test(userAgent) ? 'Chrome'
++          : /Safari\//u.test(userAgent) ? 'Safari'
++            : undefined
++  const platform = /Windows/u.test(userAgent) ? 'Windows'
++    : /iPhone|iPad|iPod/u.test(userAgent) ? 'iOS'
++      : /Android/u.test(userAgent) ? 'Android'
++        : /Mac OS X|Macintosh/u.test(userAgent) ? 'macOS'
++          : /Linux/u.test(userAgent) ? 'Linux'
++            : undefined
++  const parts = [browser, platform].filter((part): part is string => part !== undefined)
++  return parts.length === 0 ? undefined : parts.join(' · ')
++}
++
++/** Localized display time for one epoch-millisecond value. */
++function formatTime(value: number): string {
++  return new Date(value).toLocaleString()
++}
++
++/** Name shown for one device: the operator's, then its token's, then a short id. */
++function deviceTitle(device: AccessDeviceView): string {
++  return device.label ?? device.tokenLabel ?? device.id.slice(0, 8)
++}
++
++/** Render the Access section: token list on top, device list below. */
++export function AccessSettingsSection({
++  t, load, createToken, revokeToken, renameDevice, revokeDevice,
++}: AccessSettingsSectionProps) {
++  const [directory, setDirectory] = useState<AccessDirectoryView>()
++  const [failure, setFailure] = useState<string>()
++  const [draft, setDraft] = useState('')
++  const [minted, setMinted] = useState<AccessMintedTokenView>()
++  const [copied, setCopied] = useState(false)
++  const [busy, setBusy] = useState(false)
++  const [renameId, setRenameId] = useState<string>()
++  const [renameDraft, setRenameDraft] = useState('')
++
++  const accept = useCallback((next: AccessDirectoryView) => {
++    setDirectory(next)
++    setFailure(undefined)
++  }, [])
++
++  const refresh = useCallback(async () => {
++    try {
++      accept(await load())
++    } catch (error) {
++      setFailure(messageOf(error))
++    }
++  }, [accept, load])
++
++  useEffect(() => {
++    void refresh()
++  }, [refresh])
++
++  const write = async (action: () => Promise<AccessDirectoryView>) => {
++    setBusy(true)
++    try {
++      accept(await action())
++    } catch (error) {
++      setFailure(messageOf(error))
++    } finally {
++      setBusy(false)
++    }
++  }
++
++  const submitToken = async () => {
++    const label = draft.trim()
++    if (label === '') return
++    setBusy(true)
++    try {
++      setMinted(await createToken(label))
++      setCopied(false)
++      setDraft('')
++      accept(await load())
++    } catch (error) {
++      setFailure(messageOf(error))
++    } finally {
++      setBusy(false)
++    }
++  }
++
++  const copyLink = async () => {
++    if (minted === undefined) return
++    try {
++      await navigator.clipboard.writeText(loginUrlFor(minted.secret))
++      setCopied(true)
++    } catch (error) {
++      setFailure(messageOf(error))
++    }
++  }
++
++  const saveRename = async (id: string) => {
++    const label = renameDraft.trim()
++    setRenameId(undefined)
++    await write(() => renameDevice(id, label === '' ? undefined : label))
++  }
++
++  const tokens = directory?.tokens ?? []
++  const devices = directory?.devices ?? []
++
++  return (
++    <div className={css.section}>
++      <h2 className={css.heading}>{t('title')}</h2>
++      <p className={css.intro}>{t('intro')}</p>
++      {directory?.damaged !== undefined && (
++        <p className={css.warning} role="alert">{t('damaged')}: {directory.damaged}</p>
++      )}
++      {failure !== undefined && (
++        <p className={css.warning} role="alert">
++          {failure}{' '}
++          <Button size="sm" onClick={() => { void refresh() }}>{t('retry')}</Button>
++        </p>
++      )}
++
++      <section className={css.block}>
++        <h3 className={css.blockHeading}>{t('tokens.title')}</h3>
++        <p className={css.blockIntro}>{t('tokens.intro')}</p>
++        <div className={css.createRow}>
++          <Input
++            value={draft}
++            maxLength={64}
++            disabled={busy}
++            aria-label={t('tokens.placeholder')}
++            placeholder={t('tokens.placeholder')}
++            onChange={(event) => { setDraft(event.target.value) }}
++            onKeyDown={(event) => {
++              if (event.key === 'Enter') void submitToken()
++            }}
++          />
++          <Button disabled={busy || draft.trim() === ''} onClick={() => { void submitToken() }}>
++            {t('tokens.create')}
++          </Button>
++        </div>
++        {minted !== undefined && (
++          <div className={css.minted} role="status">
++            <p className={css.mintedLabel}>{t('tokens.minted')}</p>
++            <code className={css.link}>{loginUrlFor(minted.secret)}</code>
++            <div className={css.rowActions}>
++              <Button size="sm" onClick={() => { void copyLink() }}>
++                {copied ? t('tokens.copied') : t('tokens.copy')}
++              </Button>
++            </div>
++            <p className={css.hint}>{t('tokens.once')}</p>
++          </div>
++        )}
++        {tokens.length === 0
++          ? <p className={css.empty}>{t('tokens.empty')}</p>
++          : (
++            <ul className={css.list}>
++              {tokens.map(token => (
++                <li key={token.id} className={css.row}>
++                  <div className={css.rowMain}>
++                    <span className={css.rowTitle}>{token.label}</span>
++                    <span className={css.rowMeta}>
++                      {t('tokens.created')} {formatTime(token.createdAt)}
++                      {' · '}
++                      {t('tokens.deviceCount')} {token.deviceCount}
++                      {' · '}
++                      {t('tokens.lastUsed')}{' '}
++                      {token.lastUsedAt === undefined ? t('tokens.never') : formatTime(token.lastUsedAt)}
++                    </span>
++                  </div>
++                  <div className={css.rowActions}>
++                    <Button
++                      size="sm"
++                      disabled={busy}
++                      onClick={() => { void write(() => revokeToken(token.id)) }}
++                    >
++                      {t('tokens.revoke')}
++                    </Button>
++                  </div>
++                </li>
++              ))}
++            </ul>
++          )}
++      </section>
++
++      <section className={css.block}>
++        <h3 className={css.blockHeading}>{t('devices.title')}</h3>
++        <p className={css.blockIntro}>{t('devices.intro')}</p>
++        {devices.length === 0
++          ? <p className={css.empty}>{t('devices.empty')}</p>
++          : (
++            <ul className={css.list}>
++              {devices.map(device => (
++                <li
++                  key={device.id}
++                  className={device.revoked ? `${css.row} ${css.revoked}` : css.row}
++                >
++                  {renameId === device.id
++                    ? (
++                      <div className={css.renameRow}>
++                        <Input
++                          value={renameDraft}
++                          maxLength={64}
++                          autoFocus
++                          aria-label={t('devices.renamePlaceholder')}
++                          placeholder={t('devices.renamePlaceholder')}
++                          onChange={(event) => { setRenameDraft(event.target.value) }}
++                          onKeyDown={(event) => {
++                            if (event.key === 'Enter') void saveRename(device.id)
++                            if (event.key === 'Escape') setRenameId(undefined)
++                          }}
++                        />
++                        <Button size="sm" disabled={busy} onClick={() => { void saveRename(device.id) }}>
++                          {t('devices.renameSave')}
++                        </Button>
++                        <Button size="sm" onClick={() => { setRenameId(undefined) }}>
++                          {t('devices.renameCancel')}
++                        </Button>
++                      </div>
++                    )
++                    : (
++                      <>
++                        <div className={css.rowMain}>
++                          <span className={css.rowTitle}>
++                            {deviceTitle(device)}
++                            {device.revoked && ` (${t('devices.revoked')})`}
++                          </span>
++                          <span className={css.rowMeta}>
++                            {device.tokenId === undefined ? t('devices.launch') : device.tokenLabel ?? ''}
++                            {describeBrowser(device.userAgent) === undefined
++                              ? ''
++                              : ` · ${describeBrowser(device.userAgent) ?? ''}`}
++                            {device.address === undefined ? '' : ` · ${device.address}`}
++                            {' · '}
++                            {t('devices.created')} {formatTime(device.createdAt)}
++                            {' · '}
++                            {t('devices.lastSeen')} {formatTime(device.lastSeenAt)}
++                            {' · '}
++                            {t('devices.expires')} {formatTime(device.expiresAt)}
++                          </span>
++                        </div>
++                        <div className={css.rowActions}>
++                          {!device.revoked && (
++                            <>
++                              <Button
++                                size="sm"
++                                onClick={() => {
++                                  setRenameId(device.id)
++                                  setRenameDraft(device.label ?? '')
++                                }}
++                              >
++                                {t('devices.rename')}
++                              </Button>
++                              <Button
++                                size="sm"
++                                disabled={busy}
++                                onClick={() => { void write(() => revokeDevice(device.id)) }}
++                              >
++                                {t('devices.revoke')}
++                              </Button>
++                            </>
++                          )}
++                        </div>
++                      </>
++                    )}
++                </li>
++              ))}
++            </ul>
++          )}
++      </section>
++    </div>
++  )
++}
+diff --git a/packages/client/ui-settings-access/src/client/index.ts b/packages/client/ui-settings-access/src/client/index.ts
+new file mode 100644
+index 0000000..ede7eb8
+--- /dev/null
++++ b/packages/client/ui-settings-access/src/client/index.ts
+@@ -0,0 +1,76 @@
++/**
++ * Access settings plugin, browser half: one Settings section listing named
++ * login tokens and the browser devices they authorized, with the mint, rename,
++ * and revoke actions the operator needs to enroll and retire devices.
++ */
++
++import type { Context as ClientContext } from '@deepseek-ai/cordis'
++import type {} from '@deepseek-ai/dsh-client-locale/client'
++// Type-only: pulls the mounted browserAccess Remote namespace and its answers.
++import type {} from '@deepseek-ai/dsh-api-remotes/client'
++// Type-only: the settings slot types (this package registers a section).
++import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
++// Type-only: pulls the renderer's Context merge (ctx.slots).
++import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
++import type {
++  AccessDirectoryView, AccessMintedTokenView, RemoteResult,
++} from '@deepseek-ai/dsh-api-remotes/client'
++import { AccessSettingsSection } from './AccessSettingsSection.tsx'
++import type { AccessSectionInjected } from './AccessSettingsSection.tsx'
++import { en, zh, type AccessLocaleKey } from './locales.ts'
++
++declare module '@deepseek-ai/dsh-client-ui-slots' {
++  interface LocaleNamespaceMap {
++    /** The Access section's copy. */
++    'settings.access': AccessLocaleKey
++  }
++}
++
++/** This section's locale namespace. */
++const NS = 'settings.access'
++
++/** Required services (cordis fiber inject). */
++export const inject = ['slots', 'locale', 'remote', 'remote.browserAccess']
++
++/**
++ * Turn one Remote answer into its value, restoring throw semantics for the
++ * failure branch so the section reports a single error path.
++ * @param answer - pending Remote call.
++ * @returns the answered value.
++ */
++async function unwrap<T>(answer: Promise<RemoteResult<T>>): Promise<T> {
++  const result = await answer
++  if (!result.ok) throw new Error(result.error.message)
++  return result.value
++}
++
++/**
++ * Client plugin body: register the Access section under Settings.
++ * @param ctx - client root context.
++ */
++export function apply(ctx: ClientContext): void {
++  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-access: section dictionaries')
++  const t = ctx.locale.bind(NS)
++
++  const access = (): typeof ctx.remote.browserAccess => ctx.remote.browserAccess
++  const injected = (): AccessSectionInjected => ({
++    load: async (): Promise<AccessDirectoryView> => unwrap(access().directory()),
++    createToken: async (label: string): Promise<AccessMintedTokenView> =>
++      unwrap(access().createToken(label)),
++    revokeToken: async (id: string): Promise<AccessDirectoryView> =>
++      unwrap(access().revokeToken(id)),
++    renameDevice: async (id: string, label: string | undefined): Promise<AccessDirectoryView> =>
++      unwrap(access().renameDevice(id, label)),
++    revokeDevice: async (id: string): Promise<AccessDirectoryView> =>
++      unwrap(access().revokeDevice(id)),
++  })
++
++  ctx.slots.inject('settings.section', () => ctx.slots.register({
++    name: 'settings.section',
++    id: 'access',
++    order: 20,
++    label: () => t('nav'),
++    locale: NS,
++    inject: injected,
++  }, AccessSettingsSection))
++}
+diff --git a/packages/client/ui-settings-access/src/client/locales.ts b/packages/client/ui-settings-access/src/client/locales.ts
+new file mode 100644
+index 0000000..3b44470
+--- /dev/null
++++ b/packages/client/ui-settings-access/src/client/locales.ts
+@@ -0,0 +1,78 @@
++/** `settings.access` namespace dictionaries (the Access section's copy). */
++
++/** Simplified Chinese dictionary (the key-set source of truth). */
++export const zh = {
++  'nav': '访问管理',
++  'title': '访问管理',
++  'intro': '管理可以登录这台 DeepSeek Harness 的登录令牌与设备。',
++  'retry': '重试',
++  'damaged': '访问目录读取失败，下面的列表可能不完整',
++  'loading': '加载中',
++  'tokens.title': '登录令牌',
++  'tokens.intro': '为每台新设备新增一个令牌，把生成的链接发到那台设备打开即可登录。',
++  'tokens.placeholder': '设备名称，例如：办公电脑',
++  'tokens.create': '新增令牌',
++  'tokens.minted': '令牌已生成，复制下面的链接发到新设备打开：',
++  'tokens.copy': '复制链接',
++  'tokens.copied': '已复制',
++  'tokens.once': '该链接只在这里显示一次；需要再要一个时，重新新增令牌即可。',
++  'tokens.created': '创建于',
++  'tokens.lastUsed': '最近使用',
++  'tokens.never': '尚未使用',
++  'tokens.deviceCount': '已登录设备',
++  'tokens.revoke': '吊销',
++  'tokens.empty': '还没有令牌，用上面的输入框新增一个。',
++  'devices.title': '登录设备',
++  'devices.intro': '每台用令牌登录过的浏览器都会出现在这里；吊销后它的登录立即失效。',
++  'devices.created': '首次登录',
++  'devices.lastSeen': '最近活跃',
++  'devices.expires': '有效期至',
++  'devices.launch': '应急入口',
++  'devices.revoke': '退出登录',
++  'devices.revoked': '已吊销',
++  'devices.rename': '重命名',
++  'devices.renameSave': '保存',
++  'devices.renameCancel': '取消',
++  'devices.renamePlaceholder': '设备名称',
++  'devices.empty': '还没有设备用令牌登录过。',
++} satisfies Record<string, string>
++
++/** The settings.access namespace key union. */
++export type AccessLocaleKey = keyof typeof zh
++
++/** English dictionary, checked complete against the zh key set. */
++export const en = {
++  'nav': 'Access',
++  'title': 'Access',
++  'intro': 'Manage the login tokens and devices that can reach this DeepSeek Harness.',
++  'retry': 'Retry',
++  'damaged': 'The stored access directory could not be read; the lists below may be incomplete',
++  'loading': 'Loading',
++  'tokens.title': 'Login tokens',
++  'tokens.intro': 'Mint one token per new device, then open its link on that device to sign in.',
++  'tokens.placeholder': 'Device name, for example: Office PC',
++  'tokens.create': 'New token',
++  'tokens.minted': 'Token created. Copy the link below and open it on the new device:',
++  'tokens.copy': 'Copy link',
++  'tokens.copied': 'Copied',
++  'tokens.once': 'This link is shown once. Mint another token whenever you need a fresh one.',
++  'tokens.created': 'Created',
++  'tokens.lastUsed': 'Last used',
++  'tokens.never': 'Never used',
++  'tokens.deviceCount': 'Devices',
++  'tokens.revoke': 'Revoke',
++  'tokens.empty': 'No tokens yet — mint one with the field above.',
++  'devices.title': 'Devices',
++  'devices.intro': 'Every browser that signed in with a token appears here; revoking one ends its session immediately.',
++  'devices.created': 'First seen',
++  'devices.lastSeen': 'Last active',
++  'devices.expires': 'Expires',
++  'devices.launch': 'Process launch token',
++  'devices.revoke': 'Sign out',
++  'devices.revoked': 'Revoked',
++  'devices.rename': 'Rename',
++  'devices.renameSave': 'Save',
++  'devices.renameCancel': 'Cancel',
++  'devices.renamePlaceholder': 'Device name',
++  'devices.empty': 'No device has signed in with a token yet.',
++} satisfies Record<AccessLocaleKey, string>
+diff --git a/packages/client/ui-settings-access/src/css-modules.d.ts b/packages/client/ui-settings-access/src/css-modules.d.ts
+new file mode 100644
+index 0000000..8811db1
+--- /dev/null
++++ b/packages/client/ui-settings-access/src/css-modules.d.ts
+@@ -0,0 +1,4 @@
++declare module '*.module.css' {
++  const classes: Record<string, string>
++  export default classes
++}
+diff --git a/packages/client/ui-settings-access/src/index.ts b/packages/client/ui-settings-access/src/index.ts
+new file mode 100644
+index 0000000..cbf2937
+--- /dev/null
++++ b/packages/client/ui-settings-access/src/index.ts
+@@ -0,0 +1,9 @@
++/**
++ * Access settings plugin, node half. The empty apply exists so the plugin
++ * appears in the host cordis.yml / Loader; the browser half ships the Access
++ * settings section through exports["./client"], discovered from the package.json
++ * dsh.client declaration.
++ */
++
++/** Host plugin body — no host-side behavior for this surface plugin. */
++export function apply(): void {}
+diff --git a/packages/client/ui-settings-access/tests/AccessSettingsSection.client.spec.tsx b/packages/client/ui-settings-access/tests/AccessSettingsSection.client.spec.tsx
+new file mode 100644
+index 0000000..65407cb
+--- /dev/null
++++ b/packages/client/ui-settings-access/tests/AccessSettingsSection.client.spec.tsx
+@@ -0,0 +1,115 @@
++// @vitest-environment jsdom
++/** Access settings section behavior over a scripted Host directory. */
++
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import type { AccessDirectoryView } from '@deepseek-ai/dsh-api-remotes/client'
++import {
++  AccessSettingsSection, type AccessSectionInjected, type AccessSettingsSectionProps,
++} from '../src/client/AccessSettingsSection.tsx'
++import { zh } from '../src/client/locales.ts'
++
++afterEach(cleanup)
++
++const dictionary: Record<string, string> = zh
++const START = 1_700_000_000_000
++const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
++
++const EMPTY: AccessDirectoryView = { tokens: [], devices: [] }
++
++const TOKEN = {
++  id: 'tok1',
++  label: 'Office PC',
++  createdAt: START,
++  deviceCount: 1,
++}
++
++const DEVICE = {
++  id: 'dev1',
++  tokenId: 'tok1',
++  tokenLabel: 'Office PC',
++  userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0 Safari/537.36',
++  address: '192.168.169.55',
++  createdAt: START,
++  lastSeenAt: START + 60_000,
++  expiresAt: START + THIRTY_DAYS,
++  revoked: false,
++}
++
++/** Mount the section with a scripted host face. */
++function mount(overrides: Partial<AccessSectionInjected> = {}): AccessSectionInjected {
++  const injected: AccessSectionInjected = {
++    load: vi.fn(async () => ({ tokens: [TOKEN], devices: [DEVICE] })),
++    createToken: vi.fn(async (label: string) => ({ token: { ...TOKEN, label }, secret: 'minted-secret' })),
++    revokeToken: vi.fn(async () => EMPTY),
++    renameDevice: vi.fn(async () => EMPTY),
++    revokeDevice: vi.fn(async () => EMPTY),
++    ...overrides,
++  }
++  const props = {
++    t: (key: string) => dictionary[key] ?? key,
++    close: () => {},
++    ...injected,
++  } as unknown as AccessSettingsSectionProps
++  render(<AccessSettingsSection {...props} />)
++  return injected
++}
++
++describe('AccessSettingsSection', () => {
++  it('lists the tokens and devices the host answered with', async () => {
++    mount()
++    expect(await screen.findByText('Office PC')).toBeDefined()
++    expect(screen.getByText('访问管理')).toBeDefined()
++    expect(screen.getByText('登录设备')).toBeDefined()
++    expect(screen.getByText('192.168.169.55', { exact: false })).toBeDefined()
++  })
++
++  it('mints a token and shows its one-time login link', async () => {
++    const injected = mount()
++    fireEvent.change(screen.getByLabelText('设备名称，例如：办公电脑'), {
++      target: { value: '办公电脑' },
++    })
++    fireEvent.click(screen.getByText('新增令牌'))
++    await waitFor(() => { expect(injected.createToken).toHaveBeenCalledWith('办公电脑') })
++    expect(await screen.findByText('http://localhost:3000/?token=minted-secret')).toBeDefined()
++  })
++
++  it('does not mint while the name is blank', async () => {
++    const injected = mount()
++    fireEvent.click(screen.getByText('新增令牌'))
++    await waitFor(() => { expect(screen.getByText('还没有令牌，用上面的输入框新增一个。')).toBeDefined() })
++    expect(injected.createToken).not.toHaveBeenCalled()
++  })
++
++  it('revokes a token and signs a device out', async () => {
++    const injected = mount()
++    await screen.findByText('Office PC')
++    fireEvent.click(screen.getByText('吊销'))
++    await waitFor(() => { expect(injected.revokeToken).toHaveBeenCalledWith('tok1') })
++    fireEvent.click(screen.getByText('退出登录'))
++    await waitFor(() => { expect(injected.revokeDevice).toHaveBeenCalledWith('dev1') })
++  })
++
++  it('renames a device through the host face', async () => {
++    const injected = mount()
++    await screen.findByText('Office PC')
++    fireEvent.click(screen.getByText('重命名'))
++    fireEvent.change(screen.getByLabelText('设备名称'), { target: { value: '我的 MacBook' } })
++    fireEvent.click(screen.getByText('保存'))
++    await waitFor(() => { expect(injected.renameDevice).toHaveBeenCalledWith('dev1', '我的 MacBook') })
++  })
++
++  it('reports an unreadable stored directory above the lists', async () => {
++    mount({ load: vi.fn(async () => ({ ...EMPTY, damaged: 'record has an unsupported version' })) })
++    const alert = await screen.findByRole('alert')
++    expect(alert.textContent).toContain('record has an unsupported version')
++  })
++
++  it('reports a failed read and retries it', async () => {
++    const load = vi.fn(async () => { throw new Error('transport down') })
++    mount({ load })
++    expect((await screen.findByRole('alert')).textContent).toContain('transport down')
++    fireEvent.click(screen.getByText('重试'))
++    await waitFor(() => { expect(load).toHaveBeenCalledTimes(2) })
++  })
++})
+diff --git a/packages/client/ui-settings-access/tsconfig.json b/packages/client/ui-settings-access/tsconfig.json
+new file mode 100644
+index 0000000..2ba5e3f
+--- /dev/null
++++ b/packages/client/ui-settings-access/tsconfig.json
+@@ -0,0 +1,30 @@
++{
++  "extends": "../../../tsconfig.base.client.json",
++  "compilerOptions": {
++    "rootDir": "src",
++    "outDir": "lib/types"
++  },
++  "include": [
++    "src"
++  ],
++  "references": [
++    {
++      "path": "../locale"
++    },
++    {
++      "path": "../../../vendor/cordis"
++    },
++    {
++      "path": "../ui-primitives"
++    },
++    {
++      "path": "../ui-slots"
++    },
++    {
++      "path": "../ui-settings"
++    },
++    {
++      "path": "../../api/remotes/tsconfig.client.json"
++    }
++  ]
++}
+diff --git a/packages/client/ui-settings-access/tsdown.config.ts b/packages/client/ui-settings-access/tsdown.config.ts
+new file mode 100644
+index 0000000..394e4c6
+--- /dev/null
++++ b/packages/client/ui-settings-access/tsdown.config.ts
+@@ -0,0 +1,3 @@
++import { clientBundle } from '../tsdown.client.ts'
++
++export default clientBundle('@deepseek-ai/dsh-client-ui-settings-access', ['lib/types/index.js'])
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index a277390..a1a0978 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -31,10 +31,10 @@ importers:
+         version: 5.10.0(eslint@10.5.0(jiti@2.7.0))
+       '@testing-library/dom':
+         specifier: ^10.4.1
+-        version: 10.4.1
++        version: 10.4.2
+       '@testing-library/react':
+         specifier: ^16.3.2
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/js-yaml':
+         specifier: ^4.0.9
+         version: 4.0.9
+@@ -1868,6 +1868,9 @@ importers:
+       '@deepseek-ai/dsh-client-ui-settings':
+         specifier: workspace:^
+         version: link:../../client/ui-settings
++      '@deepseek-ai/dsh-client-ui-settings-access':
++        specifier: workspace:^
++        version: link:../../client/ui-settings-access
+       '@deepseek-ai/dsh-client-ui-settings-general':
+         specifier: workspace:^
+         version: link:../../client/ui-settings-general
+@@ -1993,7 +1996,7 @@ importers:
+         version: 15.0.0
+       open:
+         specifier: ^11.0.0
+-        version: 11.0.0
++        version: 11.0.4
+     devDependencies:
+       '@deepseek-ai/cordis':
+         specifier: workspace:^
+@@ -2013,6 +2016,9 @@ importers:
+       '@deepseek-ai/dsh-credentials':
+         specifier: workspace:^
+         version: link:../../credentials/credentials
++      '@deepseek-ai/dsh-typert-protocol':
++        specifier: workspace:^
++        version: link:../../typert/protocol
+       '@deepseek-ai/schemastery':
+         specifier: link:../../../vendor/schemastery
+         version: link:../../../vendor/schemastery
+@@ -2376,7 +2382,7 @@ importers:
+         version: link:../ui-sidebar
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -2805,7 +2811,7 @@ importers:
+         version: link:../ui-workspace
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -2832,7 +2838,7 @@ importers:
+         version: link:../ui-workspace
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -2856,7 +2862,7 @@ importers:
+         version: link:../ui-primitives
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -2922,7 +2928,7 @@ importers:
+         version: link:../../typert/protocol
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -3105,7 +3111,7 @@ importers:
+         version: link:../../typert/protocol
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -3462,7 +3468,7 @@ importers:
+         version: 18.3.7(@types/react@18.3.31)
+       '@types/use-sync-external-store':
+         specifier: ^1.5.0
+-        version: 1.5.0
++        version: 1.7.0
+       react:
+         specifier: ^18.2.0
+         version: 18.3.1
+@@ -3510,7 +3516,7 @@ importers:
+         version: link:../../core/session
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -3584,6 +3590,36 @@ importers:
+         specifier: ^18.2.0
+         version: 18.3.1
+ 
++  packages/client/ui-settings-access:
++    devDependencies:
++      '@deepseek-ai/cordis':
++        specifier: workspace:^
++        version: link:../../../vendor/cordis
++      '@deepseek-ai/dsh-api-remotes':
++        specifier: workspace:^
++        version: link:../../api/remotes
++      '@deepseek-ai/dsh-client-locale':
++        specifier: workspace:^
++        version: link:../locale
++      '@deepseek-ai/dsh-client-test-runtime':
++        specifier: workspace:^
++        version: link:../../test-support/client-runtime
++      '@deepseek-ai/dsh-client-ui-primitives':
++        specifier: workspace:^
++        version: link:../ui-primitives
++      '@deepseek-ai/dsh-client-ui-settings':
++        specifier: workspace:^
++        version: link:../ui-settings
++      '@deepseek-ai/dsh-client-ui-slots':
++        specifier: workspace:^
++        version: link:../ui-slots
++      '@types/react':
++        specifier: ~18.3.1
++        version: 18.3.31
++      react:
++        specifier: ^18.2.0
++        version: 18.3.1
++
+   packages/client/ui-settings-general:
+     dependencies:
+       '@deepseek-ai/schemastery':
+@@ -3718,7 +3754,7 @@ importers:
+         version: link:../ui-slots
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -3865,7 +3901,7 @@ importers:
+         version: link:../../util/workspace-path
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -3931,7 +3967,7 @@ importers:
+         version: link:../../util/workspace-path
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -3994,7 +4030,7 @@ importers:
+         version: link:../../core/session
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/picomatch':
+         specifier: ^4.0.2
+         version: 4.0.3
+@@ -4063,7 +4099,7 @@ importers:
+         version: link:../../util/workspace-path
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -4265,7 +4301,7 @@ importers:
+         version: link:../../util/workspace-path
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -5526,7 +5562,7 @@ importers:
+         version: link:../../typert/protocol
+       '@testing-library/react':
+         specifier: ^16.1.0
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       '@types/react':
+         specifier: ~18.3.1
+         version: 18.3.31
+@@ -6729,10 +6765,10 @@ importers:
+         version: link:../../../vendor/schemastery
+       compression:
+         specifier: ^1.8.1
+-        version: 1.8.1(supports-color@9.4.0)
++        version: 1.8.2(supports-color@9.4.0)
+       negotiator:
+         specifier: ^1.0.0
+-        version: 1.0.0
++        version: 1.1.0
+     devDependencies:
+       '@deepseek-ai/cordis':
+         specifier: workspace:^
+@@ -10004,10 +10040,10 @@ importers:
+     dependencies:
+       '@testing-library/dom':
+         specifier: ^10.4.1
+-        version: 10.4.1
++        version: 10.4.2
+       '@testing-library/react':
+         specifier: ^16.3.2
+-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
++        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+       js-yaml:
+         specifier: ^4.2.0
+         version: 4.3.1
+@@ -13987,8 +14023,8 @@ packages:
+   '@tanstack/virtual-core@3.17.7':
+     resolution: {integrity: sha512-bp+v10y65sp2H7WpWfIMyxTNfl8ZVfxFTLRjPIFRryi6FV/J33z4IS53WO4pTk36KlvJ4iLiQz+oaydDC1xbcA==}
+ 
+-  '@testing-library/dom@10.4.1':
+-    resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
++  '@testing-library/dom@10.4.2':
++    resolution: {integrity: sha512-yzr2S9HyAIdhz2/6qHgbs665Q7PKVcDF05vsOlHPxG1mo36gKVesdYVeDLnXgfjJ03CrKRk08knc6+E/9m8v2Q==}
+     engines: {node: '>=18'}
+ 
+   '@testing-library/react@16.3.2':
+@@ -14275,8 +14311,8 @@ packages:
+   '@types/unist@3.0.3':
+     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+ 
+-  '@types/use-sync-external-store@1.5.0':
+-    resolution: {integrity: sha512-5dyB8nLC/qogMrlCizZnYWQTA4lnb/v+It+sqNl5YnSRAPMlIqY/X0Xn+gZw8vOL+TgTTr28VEbn3uf8fUtAkw==}
++  '@types/use-sync-external-store@1.7.0':
++    resolution: {integrity: sha512-v8435kzWm3FuxyUa4r8o4sG6b0D+r+uOrzF5MXHxZKW4Haoo6txu/lq56Vio45e2i1nkmFPA+R7myWcmV7Z7Bg==}
+ 
+   '@types/web-bluetooth@0.0.21':
+     resolution: {integrity: sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA==}
+@@ -14929,8 +14965,8 @@ packages:
+     resolution: {integrity: sha512-AF3r7P5dWxL8MxyITRMlORQNaOA2IkAFaTr4k7BUumjPtRpGDTZpl0Pb1XCO6JeDCBdp126Cgs9sMxqSjgYyRg==}
+     engines: {node: '>= 0.6'}
+ 
+-  compression@1.8.1:
+-    resolution: {integrity: sha512-9mAqGPHLakhCLeNyxPkK4xVo746zQ/czLH1Ky+vkitMnWfWZps8r0qXuwhwizagCRttsL4lfG4pIOvaWLpAP0w==}
++  compression@1.8.2:
++    resolution: {integrity: sha512-o8vI5RE5A6EVVOd9o41jKp41aJom+QTEO/Bx8MYNjexMo/Bv2WOjUfZr+aL0WnYSgymUy6zeguqLTsIhV0gMvQ==}
+     engines: {node: '>= 0.8.0'}
+ 
+   concat-map@0.0.1:
+@@ -14948,6 +14984,10 @@ packages:
+     resolution: {integrity: sha512-j/O/d7GcZCyNl7/hwZAb606rzqkyvaDctLmckbxLzHvFBzTJHuGEdodATcP3yIRoDrLHkIATJuvzbFlp/ki2cQ==}
+     engines: {node: '>=18'}
+ 
++  content-type@2.1.0:
++    resolution: {integrity: sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==}
++    engines: {node: '>=18'}
++
+   convert-source-map@2.0.0:
+     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
+ 
+@@ -15199,8 +15239,8 @@ packages:
+     resolution: {integrity: sha512-x1VCxdX4t+8wVfd1so/9w+vQ4vx7lKd2Qp5tDRutErwmR85OgmfX7RlLRMWafRMY7hbEiXIbudNrjOAPa/hL8Q==}
+     engines: {node: '>=18'}
+ 
+-  default-browser@5.5.0:
+-    resolution: {integrity: sha512-H9LMLr5zwIbSxrmvikGuI/5KGhZ8E2zH3stkMgM5LpOWDutGM2JZaj460Udnf1a+946zc7YBgrqEWwbk7zHvGw==}
++  default-browser@5.5.1:
++    resolution: {integrity: sha512-m1pAzaJgZ/gssEqlOhJkPJp8Xly7QyW6xcrkUa2KKcDeDSEMP7X8xipU3snUcfisTQx0w1AGae+9UtJSfVnXGw==}
+     engines: {node: '>=18'}
+ 
+   defer-to-connect@2.0.1:
+@@ -15237,6 +15277,10 @@ packages:
+     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
+     engines: {node: '>=6'}
+ 
++  destroy@1.2.0:
++    resolution: {integrity: sha512-2sJGJTaXIIaR1w4iJSNoN0hnMY7Gpc/n8D4qSCJw8QqFWXf7cuAgnEHxBpweaVcPevC2l3KpjYCx3NypQQgaJg==}
++    engines: {node: '>= 0.8', npm: 1.2.8000 || >= 1.4.16}
++
+   detect-libc@2.1.2:
+     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
+     engines: {node: '>=8'}
+@@ -15758,9 +15802,13 @@ packages:
+     deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+     hasBin: true
+ 
++  glob@7.2.0:
++    resolution: {integrity: sha512-lmLf6gtyrPq8tTjSmrO94wBeQbFR3HbLHbuyD69wuyQkImp2hWqMGB47OX65FBkPffO641IP9jWa1z4ivqG26Q==}
++    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
++
+   glob@7.2.3:
+     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
+-    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
++    deprecated: Glob versions prior to v9 are no longer supported
+ 
+   global-agent@3.0.0:
+     resolution: {integrity: sha512-PT6XReJ+D07JvGoxQMkT6qji/jVNfX/h364XHZOWeRzy64sSFr+xJ5OX7LI3b4MPQzdL4H8Y8M0xzPpsVMwA8Q==}
+@@ -16469,8 +16517,8 @@ packages:
+   mdn-data@2.27.1:
+     resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
+ 
+-  media-typer@1.1.0:
+-    resolution: {integrity: sha512-aisnrDP4GNe06UcKFnV5bfMNPBUw4jsLGaWwWfnH3v02GnBuXX2MCVn5RbrWo0j3pczUilYblq7fQ7Nw2t5XKw==}
++  media-typer@1.1.1:
++    resolution: {integrity: sha512-yz3xRaG20c6/BOzvYoDaGtPmGscs7YivItZEEqe6GbwNfHuxu9YNmvnEkMzKldAGY4/80pRcQRZSEnhquk9XuQ==}
+     engines: {node: '>= 0.8'}
+ 
+   merge-descriptors@2.0.0:
+@@ -16668,9 +16716,9 @@ packages:
+     resolution: {integrity: sha512-myRT3DiWPHqho5PrJaIRyaMv2kgYf0mUVgBNOYMuCH5Ki1yEiQaf/ZJuQ62nvpc44wL5WDbTX7yGJi1Neevw8w==}
+     engines: {node: '>= 0.6'}
+ 
+-  negotiator@1.0.0:
+-    resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
+-    engines: {node: '>= 0.6'}
++  negotiator@1.1.0:
++    resolution: {integrity: sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg==}
++    engines: {node: '>=18'}
+ 
+   node-abi@3.96.0:
+     resolution: {integrity: sha512-rebQ/lz7i0EkoLzUVSrKRzA69zMkwLp95kKMWoMDkkM00Suxz0D7zEQPwRml5fQum24mj7bPvmlgLAmu2JCiYg==}
+@@ -16814,8 +16862,8 @@ packages:
+   oniguruma-to-es@4.3.6:
+     resolution: {integrity: sha512-csuQ9x3Yr0cEIs/Zgx/OEt9iBw9vqIunAPQkx19R/fiMq2oGVTgcMqO/V3Ybqefr1TBvosI6jU539ksaBULJyA==}
+ 
+-  open@11.0.0:
+-    resolution: {integrity: sha512-smsWv2LzFjP03xmvFoJ331ss6h+jixfA4UUV/Bsiyuu4YJPfN+FIQGOIiv4w9/+MoHkfkJ22UIaQWRVFRfH6Vw==}
++  open@11.0.4:
++    resolution: {integrity: sha512-++Zlftm0kVLPmzC06t6epuWmcRMDbI4z5P3NNX979WA/k23+NtSOynEGzsVfZwguKw2mi5umVgnBlJQMwRz4Pg==}
+     engines: {node: '>=20'}
+ 
+   openai@6.40.0:
+@@ -17016,6 +17064,10 @@ packages:
+     resolution: {integrity: sha512-dM0jVuXJPsDN6DvRpea484tCUaMiXWjuCn++HGTqUWzGDjv5tZkEZldAJ/UMlqRYGFrD/etByo4/xOuC/snX2A==}
+     engines: {node: '>=20'}
+ 
++  powershell-utils@0.2.1:
++    resolution: {integrity: sha512-C+y9x90UElAddDZmV4qOx9W53B61PO7cIqWz2dQsWlwswuq4mr8NEwytdGKboYbQlGZ3awrkTeNvcZiZNHnQ8A==}
++    engines: {node: '>=20'}
++
+   preact@10.29.7:
+     resolution: {integrity: sha512-DCHYrK/B10yUD3ZjLfhZ3WIE/9Vf9VFUODcRE2dRomTYDpJk6z6L9wecSfhfE6M9ZTHUdyQkoC46arIDhEV84Q==}
+     peerDependencies:
+@@ -18120,8 +18172,8 @@ packages:
+       utf-8-validate:
+         optional: true
+ 
+-  wsl-utils@0.3.1:
+-    resolution: {integrity: sha512-g/eziiSUNBSsdDJtCLB8bdYEUMj4jR7AGeUo96p/3dTafgjHhpF4RiCFPiRILwjQoDXx5MqkBr4fwWtR3Ky4Wg==}
++  wsl-utils@1.0.0:
++    resolution: {integrity: sha512-Hl0ZOAs672vg+06kfujwRhoS6/jehvULrlFkuF2dRu6pHgA8U06h3xqNIqNNU1LTXPcedxByAR4GS6pwQK0mgA==}
+     engines: {node: '>=20'}
+ 
+   xml-name-validator@5.0.0:
+@@ -20484,7 +20536,7 @@ snapshots:
+ 
+   '@tanstack/virtual-core@3.17.7': {}
+ 
+-  '@testing-library/dom@10.4.1':
++  '@testing-library/dom@10.4.2':
+     dependencies:
+       '@babel/code-frame': 7.29.7
+       '@babel/runtime': 7.29.7
+@@ -20495,10 +20547,10 @@ snapshots:
+       picocolors: 1.1.1
+       pretty-format: 27.5.1
+ 
+-  '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
++  '@testing-library/react@16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+     dependencies:
+       '@babel/runtime': 7.29.7
+-      '@testing-library/dom': 10.4.1
++      '@testing-library/dom': 10.4.2
+       react: 18.3.1
+       react-dom: 18.3.1(react@18.3.1)
+     optionalDependencies:
+@@ -20819,7 +20871,7 @@ snapshots:
+ 
+   '@types/unist@3.0.3': {}
+ 
+-  '@types/use-sync-external-store@1.5.0': {}
++  '@types/use-sync-external-store@1.7.0': {}
+ 
+   '@types/web-bluetooth@0.0.21': {}
+ 
+@@ -21141,7 +21193,7 @@ snapshots:
+   accepts@2.0.0:
+     dependencies:
+       mime-types: 3.0.2
+-      negotiator: 1.0.0
++      negotiator: 1.1.0
+ 
+   acorn-jsx@5.3.2(acorn@8.17.0):
+     dependencies:
+@@ -21554,11 +21606,12 @@ snapshots:
+     dependencies:
+       mime-db: 1.54.0
+ 
+-  compression@1.8.1(supports-color@9.4.0):
++  compression@1.8.2(supports-color@9.4.0):
+     dependencies:
+       bytes: 3.1.2
+       compressible: 2.0.18
+       debug: 2.6.9(supports-color@9.4.0)
++      destroy: 1.2.0
+       negotiator: 0.6.4
+       on-headers: 1.1.0
+       safe-buffer: 5.2.1
+@@ -21574,6 +21627,8 @@ snapshots:
+ 
+   content-type@2.0.0: {}
+ 
++  content-type@2.1.0: {}
++
+   convert-source-map@2.0.0: {}
+ 
+   cookie-signature@1.2.2: {}
+@@ -21840,7 +21895,7 @@ snapshots:
+ 
+   default-browser-id@5.0.1: {}
+ 
+-  default-browser@5.5.0:
++  default-browser@5.5.1:
+     dependencies:
+       bundle-name: 4.1.0
+       default-browser-id: 5.0.1
+@@ -21875,6 +21930,8 @@ snapshots:
+ 
+   dequal@2.0.3: {}
+ 
++  destroy@1.2.0: {}
++
+   detect-libc@2.1.2: {}
+ 
+   detect-node@2.1.0:
+@@ -22592,6 +22649,15 @@ snapshots:
+       package-json-from-dist: 1.0.1
+       path-scurry: 2.0.2
+ 
++  glob@7.2.0:
++    dependencies:
++      fs.realpath: 1.0.0
++      inflight: 1.0.6
++      inherits: 2.0.4
++      minimatch: 3.1.5
++      once: 1.4.0
++      path-is-absolute: 1.0.1
++
+   glob@7.2.3:
+     dependencies:
+       fs.realpath: 1.0.0
+@@ -23365,7 +23431,7 @@ snapshots:
+ 
+   mdn-data@2.27.1: {}
+ 
+-  media-typer@1.1.0: {}
++  media-typer@1.1.1: {}
+ 
+   merge-descriptors@2.0.0: {}
+ 
+@@ -23667,7 +23733,9 @@ snapshots:
+ 
+   negotiator@0.6.4: {}
+ 
+-  negotiator@1.0.0: {}
++  negotiator@1.1.0:
++    dependencies:
++      content-type: 2.1.0
+ 
+   node-abi@3.96.0:
+     dependencies:
+@@ -23808,14 +23876,14 @@ snapshots:
+       regex: 6.1.0
+       regex-recursion: 6.0.2
+ 
+-  open@11.0.0:
++  open@11.0.4:
+     dependencies:
+-      default-browser: 5.5.0
++      default-browser: 5.5.1
+       define-lazy-prop: 3.0.0
+       is-in-ssh: 1.0.0
+       is-inside-container: 1.0.0
+-      powershell-utils: 0.1.0
+-      wsl-utils: 0.3.1
++      powershell-utils: 0.2.1
++      wsl-utils: 1.0.0
+ 
+   openai@6.40.0(ws@8.21.0)(zod@4.4.3):
+     optionalDependencies:
+@@ -24022,6 +24090,8 @@ snapshots:
+ 
+   powershell-utils@0.1.0: {}
+ 
++  powershell-utils@0.2.1: {}
++
+   preact@10.29.7: {}
+ 
+   prebuild-install@7.1.3:
+@@ -24240,7 +24310,7 @@ snapshots:
+ 
+   rimraf@2.6.3:
+     dependencies:
+-      glob: 7.2.3
++      glob: 7.2.0
+ 
+   roarr@2.15.4:
+     dependencies:
+@@ -24851,7 +24921,7 @@ snapshots:
+   type-is@2.1.0:
+     dependencies:
+       content-type: 2.0.0
+-      media-typer: 1.1.0
++      media-typer: 1.1.1
+       mime-types: 3.0.2
+ 
+   typebox@1.3.7: {}
+@@ -25272,7 +25342,7 @@ snapshots:
+ 
+   ws@8.21.0: {}
+ 
+-  wsl-utils@0.3.1:
++  wsl-utils@1.0.0:
+     dependencies:
+       is-wsl: 3.1.1
+       powershell-utils: 0.1.0
+diff --git a/tsconfig.client.json b/tsconfig.client.json
+index 494e4f7..9b357ad 100644
+--- a/tsconfig.client.json
++++ b/tsconfig.client.json
+@@ -107,6 +107,7 @@
+     { "path": "./packages/client/ui-theme" },
+     { "path": "./packages/client/ui-settings" },
+     { "path": "./packages/client/ui-settings-general" },
++    { "path": "./packages/client/ui-settings-access" },
+     { "path": "./packages/client/ui-settings-models" },
+     { "path": "./packages/client/ui-settings-plugin-inventory" },
+     { "path": "./packages/client/locale" },
+diff --git a/tsconfig.host.json b/tsconfig.host.json
+index c5a3f11..9d6e14a 100644
+--- a/tsconfig.host.json
++++ b/tsconfig.host.json
+@@ -160,6 +160,7 @@
+     { "path": "./packages/util/atomic-write" },
+     { "path": "./packages/attachment/attachment" },
+     { "path": "./packages/attachment/attachment-local" },
++    { "path": "./packages/client/connection/tsconfig.host.json" },
+     { "path": "./packages/client/file-upload/tsconfig.host.json" },
+     { "path": "./packages/llm/llm" },
+     { "path": "./packages/llm/deepseek-llm-api-extensions" },
+-- 
+2.43.0
+

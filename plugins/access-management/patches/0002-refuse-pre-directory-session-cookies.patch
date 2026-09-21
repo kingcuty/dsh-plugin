@@ -1,0 +1,107 @@
+From c88b4a2ee388613c560f33a057853462606c6f92 Mon Sep 17 00:00:00 2001
+From: dsh-local <dsh-local@localhost>
+Date: Wed, 16 Sep 2026 12:34:12 +0800
+Subject: [PATCH] feat(connection): refuse session cookies minted before the
+ access directory
+
+A version-1 cookie carries no device id, so the directory can neither list nor
+revoke it: it is exactly the unmanaged session the directory exists to
+eliminate. Refusing it retires every pre-directory browser session, and the
+process launch token still reaches Settings to recover one.
+
+The device test now waits for the exchange's queued device write, because a
+later activation reads devices back from storage.
+---
+ .../client/connection/src/browser-access.ts   |  4 ++++
+ .../client/connection/src/browser-auth.ts     | 23 +++++--------------
+ .../tests/browser-auth.host.spec.ts           |  4 ++++
+ 3 files changed, 14 insertions(+), 17 deletions(-)
+
+diff --git a/packages/client/connection/src/browser-access.ts b/packages/client/connection/src/browser-access.ts
+index a5b0b0e..21d6149 100644
+--- a/packages/client/connection/src/browser-access.ts
++++ b/packages/client/connection/src/browser-access.ts
+@@ -206,6 +206,10 @@ export class BrowserAccessDirectory implements BrowserAccessHandle {
+    */
+   deviceActive(id: string): boolean {
+     if (this.unenforceable) return true
++    // A cookie naming a device the directory does not hold is refused, which is
++    // what makes dropping a record a permanent revocation. Recording a device
++    // writes memory first, so only a crash between the write and the flush can
++    // strand a session, and the process launch token still recovers it.
+     const device = this.device(id)
+     return device !== undefined && device.revokedAt === undefined
+   }
+diff --git a/packages/client/connection/src/browser-auth.ts b/packages/client/connection/src/browser-auth.ts
+index b393996..305e07d 100644
+--- a/packages/client/connection/src/browser-auth.ts
++++ b/packages/client/connection/src/browser-auth.ts
+@@ -16,8 +16,6 @@ const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
+ const SECRET_BYTES = 32
+ const TOKEN_QUERY = 'token'
+ const COOKIE_PREFIX = 'dsh-auth-'
+-/** Cookies minted before devices were recorded carry no device id. */
+-const LEGACY_COOKIE_PAYLOAD_VERSION = 1
+ const COOKIE_PAYLOAD_VERSION = 2
+ const STORED_SECRET_VERSION = 1
+ const BASE64URL_PATTERN = /^[A-Za-z0-9_-]*$/
+@@ -35,8 +33,8 @@ interface BrowserCookiePayload {
+   readonly authority: string
+   readonly issuedAt: number
+   readonly expiresAt: number
+-  /** Device this cookie belongs to; absent on legacy cookies. */
+-  readonly deviceId?: string
++  /** Device this cookie belongs to; every live cookie names one. */
++  readonly deviceId: string
+ }
+ 
+ /** What one presented token matched: the process launch token, or a stored one. */
+@@ -180,16 +178,10 @@ function decodeCookie(value: string, secret: Buffer): BrowserCookiePayload | und
+     || !Number.isSafeInteger(decoded.issuedAt)
+     || !Number.isSafeInteger(decoded.expiresAt)
+     || typeof decoded.authority !== 'string') return undefined
+-  const cookieVersion = decoded.version
+-  if (cookieVersion === LEGACY_COOKIE_PAYLOAD_VERSION) {
+-    return {
+-      version: LEGACY_COOKIE_PAYLOAD_VERSION,
+-      authority: decoded.authority,
+-      issuedAt: decoded.issuedAt as number,
+-      expiresAt: decoded.expiresAt as number,
+-    }
+-  }
+-  if (cookieVersion !== COOKIE_PAYLOAD_VERSION || typeof decoded.deviceId !== 'string') return undefined
++  // Cookies minted before the access directory existed carry no device id and
++  // are refused: they are exactly the unmanaged sessions revocation cannot
++  // reach, and every live session now names the device it belongs to.
++  if (decoded.version !== COOKIE_PAYLOAD_VERSION || typeof decoded.deviceId !== 'string') return undefined
+   return {
+     version: COOKIE_PAYLOAD_VERSION,
+     authority: decoded.authority,
+@@ -334,9 +326,6 @@ export class BrowserAuth {
+       || !(payload.expiresAt > now)
+       || !(payload.expiresAt > payload.issuedAt)
+       || payload.expiresAt - payload.issuedAt > this.maxAgeMilliseconds) return false
+-    // A legacy cookie names no device: it predates the directory, so there is
+-    // nothing to enforce and nothing to record.
+-    if (payload.deviceId === undefined) return true
+     if (!this.access.deviceActive(payload.deviceId)) return false
+     this.access.touchDevice(payload.deviceId, now, TOUCH_INTERVAL_MILLISECONDS)
+     return true
+diff --git a/packages/client/connection/tests/browser-auth.host.spec.ts b/packages/client/connection/tests/browser-auth.host.spec.ts
+index 2551a31..1eeb1fa 100644
+--- a/packages/client/connection/tests/browser-auth.host.spec.ts
++++ b/packages/client/connection/tests/browser-auth.host.spec.ts
+@@ -115,6 +115,10 @@ describe('BrowserAuth', () => {
+     expect(first.isAuthenticated(request('/', 'localhost:3080', { cookie: login.cookie }))).toBe(false)
+     expect(first.isAuthenticated(request('/', '127.0.0.1:3081', { cookie: login.cookie }))).toBe(false)
+ 
++    // The exchange records its device on a serialized write queue, and a later
++    // activation reads devices back from storage rather than from memory.
++    await first.access.settled()
++
+     const reloaded = await createAuth(store, 30, processOwner)
+     expect(reloaded.authenticatedUrl('http://127.0.0.1:3080')).toBe(login.launchUrl)
+     expect(reloaded.isAuthenticated(request('/', '127.0.0.1:3080', { cookie: login.cookie }))).toBe(true)
+-- 
+2.43.0
+

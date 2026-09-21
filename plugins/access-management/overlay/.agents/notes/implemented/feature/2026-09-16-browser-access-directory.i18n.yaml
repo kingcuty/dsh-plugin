@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-browser-access-directory.md
+2026-09-16-browser-access-directory.md: 8221065ca172e577962d20dc3a113bddc9d7a4fb
+2026-09-16-browser-access-directory.zh.md: 71868a04d79a73d25e8d5a0f504d301ce61013e5
