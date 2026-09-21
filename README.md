@@ -42,6 +42,20 @@ bash ../dshplugin/plugins/dsh-access-management/verify.sh  --repo .   # 自检
 
 细节见该目录下的 [`交付说明.md`](plugins/dsh-access-management/交付说明.md)（含前置条件、页面验证清单、回滚与排障）。
 
+
+### 若把仓库改为公开：链接即可匿名安装
+
+公开后不需要任何 Gitee 凭据，tarball 有稳定的 raw 链接：
+
+```sh
+curl -fL -o /tmp/dsh-mobile-ui.tgz \
+  https://gitee.com/rhtcai/dshplugin/raw/main/plugins/dsh-mobile-ui/dist/dsh-mobile-ui-0.2.1.tgz
+dsh plugin --profile web add /tmp/dsh-mobile-ui.tgz
+systemctl --user restart dsh-web        # 首次装完重启一次
+```
+
+新版发布流程：在插件目录 \`npm pack --pack-destination dist\`，把新 tarball 一起提交，然后把上面链接里的版本号换掉。
+
 ## 目录约定
 
 ```
