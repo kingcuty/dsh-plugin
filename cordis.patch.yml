@@ -1,0 +1,6 @@
+# Bundle patch for dsh-mobile-ui: one inert host row whose package declares a
+# `dsh.client` web half. Installing the package into a profile (dsh.profile.bundles)
+# is what applies this row; removing it restores the official Web GUI.
+- insert:
+    - id: mobile-ui
+      name: dsh-mobile-ui
