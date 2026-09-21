@@ -32,7 +32,7 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 | --- | --- |
 | 本仓库目录 | `/home/dev/projects/dsh-mobile-ui` |
 | 打包产物 | `dist/dsh-mobile-ui-<version>.tgz`（`npm pack --pack-destination dist` 生成） |
-| Git / npm | 推仓库后用 `github:<user>/<repo>`，或发布后用包名 |
+| Gitee 仓库 | **https://gitee.com/rhtcai/dshplugin** —— 插件已提交在此，按 2.1 用 git 方式安装即可 |
 
 ---
 
@@ -43,10 +43,10 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 ```sh
 dsh plugin --profile web add <来源>
 # 例：
-dsh plugin --profile web add dsh-mobile-ui                            # npm 上（发布后）
-dsh plugin --profile web add github:<user>/dsh-mobile-ui              # git
-dsh plugin --profile web add ./dist/dsh-mobile-ui-0.2.1.tgz           # 本地 tarball
-dsh plugin --profile web add /abs/path/dsh-mobile-ui                  # 本地目录
+dsh plugin --profile web add git+https://gitee.com/rhtcai/dshplugin.git   # Gitee 仓库（推荐，无需 SSH key）
+dsh plugin --profile web add ./dist/dsh-mobile-ui-0.2.1.tgz               # 本地 tarball
+dsh plugin --profile web add /abs/path/dsh-mobile-ui                      # 本地目录
+dsh plugin --profile web add dsh-mobile-ui                                # npm 上（发布后）
 
 # 首次安装后重启一次（bundles 层栈在进程启动时组装）
 systemctl --user restart dsh-web
@@ -145,7 +145,14 @@ dsh plugin --profile web add ./dsh-mobile-ui-0.2.1.tgz
 systemctl --user restart dsh-web
 ```
 
-或者推到 Git 仓库 / 发布到 npm，让对方用 `github:<user>/<repo>` / 包名安装。tarball 内含：`client.js`、`index.mjs`、`cordis.patch.yml`、`package.json`、`README.md`、`DEPLOY.md`。
+或者**直接让对方用已提交的仓库**（最省事，不用发文件）：
+
+```sh
+dsh plugin --profile web add git+https://gitee.com/rhtcai/dshplugin.git
+systemctl --user restart dsh-web
+```
+
+也可以发布到 npm 后用包名安装。tarball 内含：`client.js`、`index.mjs`、`cordis.patch.yml`、`package.json`、`README.md`、`DEPLOY.md`。
 
 ---
 
