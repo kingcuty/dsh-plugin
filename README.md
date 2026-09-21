@@ -18,6 +18,11 @@
 不动 DSH 源码，只写用户级 profile（`~/.dsh/profiles/<name>/`），升级 DSH 不受影响。
 
 ```sh
+# 一行（已配好 Gitee SSH key 的机器，把仓库链接换成插件名即可装任意插件）
+tmp=$(mktemp -d) && git clone --depth 1 git@gitee.com:rhtcai/dshplugin.git "$tmp/dshplugin" \
+  && bash "$tmp/dshplugin/plugins/dsh-mobile-ui/install.sh"
+
+# 或者分两步：先 clone，再按插件跑各自的 install.sh
 git clone git@gitee.com:rhtcai/dshplugin.git
 bash dshplugin/plugins/dsh-mobile-ui/install.sh        # 一键：备份 profile → dsh plugin add → 自查提示
 
