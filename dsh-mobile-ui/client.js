@@ -306,6 +306,16 @@ html[data-dshm] .dshm-fab,
 html[data-dshm] .dshm-scrim,
 html[data-dshm] [data-phase='active'] [data-composer-card] > :last-child button:not([data-dshm-primary]) {
   -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Only the rail chips are in flow and therefore need their own containing block for
+ * the ::after overlay. The handle and the toggle are position: fixed, which already
+ * anchors them: an explicit position: relative here would out-rank their fixed
+ * placement and drop both controls into the document flow — they land in the
+ * top-left corner of the page.
+ */
+html[data-dshm] [data-phase='active'] [data-composer-card] > :last-child button:not([data-dshm-primary]) {
   position: relative;
 }
 
