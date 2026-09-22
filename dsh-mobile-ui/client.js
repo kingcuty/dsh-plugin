@@ -512,7 +512,12 @@ html[data-dshm] [data-phase='active'] [data-composer-seat] {
 html[data-dshm] [data-phase='active'] [data-composer-card] > :last-child {
   position: fixed;
   right: 16px;
-  bottom: calc(var(--dshm-card-bottom, 8px) + 46px);
+  /*
+   * Stacked above the toggle with the same 6px gap the chips keep between them:
+   * derived from the toggle's own seat (expanded it is the 32px chip, so 32 + 6 = 38)
+   * rather than a second hardcoded offset, so the seat arithmetic lives in one place.
+   */
+  bottom: calc(var(--dshm-fab-bottom, calc(var(--dshm-card-bottom, 8px) + 10px)) + 38px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -672,6 +677,10 @@ html[data-dshm] [data-phase='active'] [data-composer-card] > :last-child button:
   border-radius: 9px;
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-primary);
+  /* The collapse toggle's own shadow: measured against a live chip this was the one
+     remaining difference (size, radius, border and fill already matched), and the
+     rail should read as one family of identical boxes. */
+  box-shadow: var(--dsw-shadow-lv2);
   overflow: hidden;
 }
 
