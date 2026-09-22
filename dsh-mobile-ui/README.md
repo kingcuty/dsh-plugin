@@ -16,6 +16,10 @@ DSH Web GUI 的移动端 UI 优化插件（iOS / Android / 鸿蒙 UA 生效）�
 | --- | --- |
 | <img src="docs/images/mobile-composer-expanded.png" width="230" alt="输入区展开：全宽输入卡片与工具行"> | <img src="docs/images/mobile-composer-collapsed.png" width="230" alt="输入区收起：右下角蓝色圆点，底部统计行常驻"> |
 
+设置 → 通用设置 → **移动端优化**：下拉即 **启用 / 停用**，停用立即回到官方布局（偏好按浏览器保存在 `localStorage['dsh-mobile-ui.enabled']`）：
+
+<img src="docs/images/mobile-settings-toggle.png" width="520" alt="移动端优化开关：启用 / 停用 下拉菜单">
+
 桌面端（1280×900 视口）与官方完全一致，看不到任何插件痕迹——`data-dshm` 属性不会出现，窄桌窗口同理：
 
 <img src="docs/images/desktop-unchanged.png" width="720" alt="桌面端保持官方布局">
