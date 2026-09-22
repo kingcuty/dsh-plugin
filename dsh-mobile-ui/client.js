@@ -138,14 +138,6 @@ const reportMissingSeams = (root = document) => {
  * right. Retune the whole motion from these five values.
  */
 html[data-dshm] {
-  /*
-   * No tap flash anywhere in the phone presentation. Android/HarmonyOS WebView paints
-   * a translucent blue rectangle over whatever is tapped (the drawer handle flashed
-   * the whole frame, every rail chip flashed its own box); the property inherits, so
-   * one declaration on the root covers the plugin's controls and the official ones
-   * they sit beside. Desktop is untouched — the rule is scoped to html[data-dshm].
-   */
-  -webkit-tap-highlight-color: transparent;
   /* One clock for the whole gesture: the card and its input move exactly like the
      vertical controls, and only the rail's per-button stagger is stepped. */
   --dshm-card-grow: 240ms;
@@ -299,6 +291,40 @@ html[data-dshm] [role='dialog'][aria-modal='true'] [class*='themeCube'] {
   flex: 1 1 0;
   padding: 12px 6px;
   border-radius: 14px;
+}
+
+/*
+ * Press feedback for the plugin's own controls. The platform tap highlight is a plain
+ * blue rectangle that ignores border-radius (on the drawer handle it covered the whole
+ * overlay), so these controls turn it off and paint their own tint: an ::after overlay
+ * inset to the control, inheriting and clipped by its corner radius — the same shape a
+ * native rounded button shows when pressed. Official controls keep the platform
+ * highlight untouched.
+ */
+html[data-dshm] .dshm-handle,
+html[data-dshm] .dshm-fab,
+html[data-dshm] .dshm-scrim,
+html[data-dshm] [data-phase='active'] [data-composer-card] > :last-child button:not([data-dshm-primary]) {
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+html[data-dshm] .dshm-handle::after,
+html[data-dshm] .dshm-fab::after,
+html[data-dshm] [data-phase='active'] [data-composer-card] > :last-child button:not([data-dshm-primary])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: transparent;
+  pointer-events: none;
+  transition: background-color 90ms linear;
+}
+
+html[data-dshm] .dshm-handle:active::after,
+html[data-dshm] .dshm-fab:active::after,
+html[data-dshm] [data-phase='active'] [data-composer-card] > :last-child button:not([data-dshm-primary]):active::after {
+  background: color-mix(in srgb, var(--dsw-alias-button-info-fill) 32%, transparent);
 }
 
 /* Settings → General row: official preference-row metrics (title 14/22 primary,
