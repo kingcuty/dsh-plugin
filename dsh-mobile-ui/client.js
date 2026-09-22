@@ -1286,22 +1286,29 @@ html[data-dshm] *::-webkit-scrollbar {
               setVar('--dshm-card-bottom', Math.max(0, Math.round(window.innerHeight - rect.bottom)) + 'px')
               setVar('--dshm-card-height', Math.round(rect.height) + 'px')
             } else if (!animating) {
-              // Collapsed the card measures zero, so its resting bottom is derived:
-              // the seat's top plus the card height last measured while it was open.
-              // Without this a conversation that opens already collapsed (a brand-new
-              // session, whose first layout is a collapsed composer) keeps the CSS
-              // fallback and the toggle lands low until the first expand teaches it
-              // the real seat.
+              // Collapsed the card measures zero, so its resting bottom comes from an
+              // anchor that is on screen in both states: the permanent stats row shares
+              // the composer card's bottom edge exactly (measured 30px on the phone
+              // frame), and unlike a cached measurement it is right on the first paint
+              // of a conversation that opens already collapsed — the landing hero hands
+              // over stale insets, which is why the toggle used to land off-seat until
+              // an expand taught it the real one.
+              const statsElement = seam('statsRow')
               const seatElement = seam('seat')
               const cardHeight = Number.parseFloat(String(writtenVars.get('--dshm-card-height') ?? ''))
-              if (seatElement !== null && Number.isFinite(cardHeight) && cardHeight > 0) {
-                const seatRect = seatElement.getBoundingClientRect()
-                const derived = Math.round(window.innerHeight - (seatRect.top + cardHeight))
-                // The composer rests in the bottom band; a larger value means the seat
-                // sits somewhere else (the landing hero), where the CSS fallback is the
-                // safer answer.
-                if (seatRect.height > 0 && derived >= 0 && derived < 240) setVar('--dshm-card-bottom', derived + 'px')
+              let derived = null
+              if (statsElement !== null) {
+                const statsRect = statsElement.getBoundingClientRect()
+                if (statsRect.height > 0) derived = Math.round(window.innerHeight - statsRect.top)
               }
+              if (derived === null && seatElement !== null && Number.isFinite(cardHeight) && cardHeight > 0) {
+                const seatRect = seatElement.getBoundingClientRect()
+                if (seatRect.height > 0) derived = Math.round(window.innerHeight - (seatRect.top + cardHeight))
+              }
+              // The composer rests in the bottom band; a much larger value means the
+              // anchor is somewhere else entirely (the landing hero), where the CSS
+              // fallback is the safer answer.
+              if (derived !== null && derived >= 0 && derived < 240) setVar('--dshm-card-bottom', derived + 'px')
             }
           } else {
             clearVar('--dshm-columns')
