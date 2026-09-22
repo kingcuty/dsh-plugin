@@ -746,10 +746,14 @@ html[data-dshm][data-dshm-composer='expanded'] [data-phase='active'] [data-compo
 .dshm-fab {
   position: fixed;
   right: 16px;
-  /* ONE seat in both states: the card's own bottom inset as last measured (the
-     filler below the composer is the permanent stats strip), so collapsing the
-     composer does not move the control. */
-  bottom: var(--dshm-fab-bottom, calc(var(--dshm-card-bottom, 30px) + 8px));
+  /*
+   * ONE seat in both states, and the same centre line as the send button: the send
+   * is a 34px circle pinned 9px above the card's bottom (centre = +26), so a 32px
+   * toggle must sit 10px above it to share that centre. 8px here would leave the
+   * toggle 2px lower when collapsed than while expanded — a visible jump on every
+   * toggle. The adapter's measured --dshm-fab-bottom resolves to the same value.
+   */
+  bottom: var(--dshm-fab-bottom, calc(var(--dshm-card-bottom, 30px) + 10px));
   display: grid;
   place-items: center;
   width: 36px;
