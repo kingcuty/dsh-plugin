@@ -1285,6 +1285,23 @@ html[data-dshm] *::-webkit-scrollbar {
               setVar('--dshm-card-right', Math.max(0, Math.round(window.innerWidth - rect.right)) + 'px')
               setVar('--dshm-card-bottom', Math.max(0, Math.round(window.innerHeight - rect.bottom)) + 'px')
               setVar('--dshm-card-height', Math.round(rect.height) + 'px')
+            } else if (!animating) {
+              // Collapsed the card measures zero, so its resting bottom is derived:
+              // the seat's top plus the card height last measured while it was open.
+              // Without this a conversation that opens already collapsed (a brand-new
+              // session, whose first layout is a collapsed composer) keeps the CSS
+              // fallback and the toggle lands low until the first expand teaches it
+              // the real seat.
+              const seatElement = seam('seat')
+              const cardHeight = Number.parseFloat(String(writtenVars.get('--dshm-card-height') ?? ''))
+              if (seatElement !== null && Number.isFinite(cardHeight) && cardHeight > 0) {
+                const seatRect = seatElement.getBoundingClientRect()
+                const derived = Math.round(window.innerHeight - (seatRect.top + cardHeight))
+                // The composer rests in the bottom band; a larger value means the seat
+                // sits somewhere else (the landing hero), where the CSS fallback is the
+                // safer answer.
+                if (seatRect.height > 0 && derived >= 0 && derived < 240) setVar('--dshm-card-bottom', derived + 'px')
+              }
             }
           } else {
             clearVar('--dshm-columns')
