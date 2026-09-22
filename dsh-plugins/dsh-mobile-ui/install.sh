@@ -3,7 +3,7 @@
 #
 # 用法：
 #   git clone git@gitee.com:rhtcai/dshplugin.git
-#   bash dshplugin/plugins/dsh-mobile-ui/install.sh        # 默认用本脚本所在目录作为安装源
+#   bash dshplugin/dsh-plugins/dsh-mobile-ui/install.sh        # 默认用本脚本所在目录作为安装源
 #   bash install.sh --profile web --restart                # 装完顺带重启 web 服务
 #   bash install.sh --dry-run                              # 只打印将执行的动作
 #   bash install.sh --source /abs/path/dsh-mobile-ui       # 显式指定安装源（本地目录或 .tgz）
@@ -11,7 +11,7 @@
 # 行为：备份 profile → dsh plugin add（包自带 bundle 补丁，CLI 自动并入层栈）→ 打印生效与自查步骤。
 # 默认 **不重启** 服务：重启会中断正在跑的会话/任务，请在合适时机自己执行（或加 --restart）。
 #
-# 注意：本仓库把插件统一放在 plugins/<插件名>/，仓库根不再是包，
+# 注意：本仓库把插件统一放在 dsh-plugins/<插件名>/，仓库根不再是包，
 #   所以旧的 `dsh plugin add git+https://gitee.com/rhtcai/dshplugin.git` 不再适用。
 set -euo pipefail
 
