@@ -30,11 +30,11 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 
 | 来源 | 说明 |
 | --- | --- |
-| 本仓库 | 插件位于 **`dsh-plugins/dsh-mobile-ui/`**（仓库：<https://gitee.com/rhtcai/dshplugin>，**私有**，需有访问权限的账号才能 clone） |
-| 打包产物 | `dsh-plugins/dsh-mobile-ui/dist/dsh-mobile-ui-<version>.tgz`（`npm pack --pack-destination dist` 生成） |
-| 安装脚本 | `dsh-plugins/dsh-mobile-ui/install.sh` —— 等价于 2.1 的手工步骤，另加 profile 备份与结果自查 |
+| 本仓库 | 插件位于 **`dsh-mobile-ui/`**（仓库：<https://gitee.com/rhtcai/dshplugin>，**私有**，需有访问权限的账号才能 clone） |
+| 打包产物 | `dsh-mobile-ui/dist/dsh-mobile-ui-<version>.tgz`（`npm pack --pack-destination dist` 生成） |
+| 安装脚本 | `dsh-mobile-ui/install.sh` —— 等价于 2.1 的手工步骤，另加 profile 备份与结果自查 |
 
-> 仓库已按「一插件一目录」规整为 `dsh-plugins/<插件名>/`，仓库根不再是包，
+> 仓库已按「一插件一目录」规整为 `<插件名>/`，仓库根不再是包，
 > 因此旧的 `dsh plugin add git+https://gitee.com/rhtcai/dshplugin.git` **不再适用**（git 依赖只认仓库根的 `package.json`）。
 > 改用下面的仓库内路径、仓库内 tarball，或直接跑 `install.sh`。
 
@@ -48,8 +48,8 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 dsh plugin --profile web add <来源>
 # 例：
 git clone git@gitee.com:rhtcai/dshplugin.git                               # 私有仓库，先拿到本仓库
-dsh plugin --profile web add ./dshplugin/dsh-plugins/dsh-mobile-ui            # 仓库里的插件目录（推荐）
-dsh plugin --profile web add ./dshplugin/dsh-plugins/dsh-mobile-ui/dist/dsh-mobile-ui-0.2.2.tgz  # 仓库里的 tarball
+dsh plugin --profile web add ./dshplugin/dsh-mobile-ui            # 仓库里的插件目录（推荐）
+dsh plugin --profile web add ./dshplugin/dsh-mobile-ui/dist/dsh-mobile-ui-0.2.2.tgz  # 仓库里的 tarball
 dsh plugin --profile web add /abs/path/dsh-mobile-ui                      # 任意本地目录
 dsh plugin --profile web add dsh-mobile-ui                                # npm 上（发布后）
 
@@ -154,7 +154,7 @@ systemctl --user restart dsh-web
 
 ```sh
 git clone git@gitee.com:rhtcai/dshplugin.git
-dsh plugin --profile web add ./dshplugin/dsh-plugins/dsh-mobile-ui
+dsh plugin --profile web add ./dshplugin/dsh-mobile-ui
 systemctl --user restart dsh-web
 ```
 
