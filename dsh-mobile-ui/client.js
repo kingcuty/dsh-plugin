@@ -138,6 +138,14 @@ const reportMissingSeams = (root = document) => {
  * right. Retune the whole motion from these five values.
  */
 html[data-dshm] {
+  /*
+   * No tap flash anywhere in the phone presentation. Android/HarmonyOS WebView paints
+   * a translucent blue rectangle over whatever is tapped (the drawer handle flashed
+   * the whole frame, every rail chip flashed its own box); the property inherits, so
+   * one declaration on the root covers the plugin's controls and the official ones
+   * they sit beside. Desktop is untouched — the rule is scoped to html[data-dshm].
+   */
+  -webkit-tap-highlight-color: transparent;
   /* One clock for the whole gesture: the card and its input move exactly like the
      vertical controls, and only the rail's per-button stagger is stepped. */
   --dshm-card-grow: 240ms;
