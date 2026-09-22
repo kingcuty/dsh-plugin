@@ -30,7 +30,7 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 
 | 来源 | 说明 |
 | --- | --- |
-| 本仓库 | 插件位于 **`dsh-mobile-ui/`**（仓库：<https://gitee.com/rhtcai/dshplugin>，**私有**，需有访问权限的账号才能 clone） |
+| 本仓库 | 插件位于仓库的 **`dsh-mobile-ui/`** 目录。公开副本：<https://github.com/kingcuty/dsh-plugin>（匿名可 clone / raw 下载）；私有副本：<https://gitee.com/rhtcai/dshplugin>（需有访问权限的账号） |
 | 打包产物 | `dsh-mobile-ui/dist/dsh-mobile-ui-<version>.tgz`（`npm pack --pack-destination dist` 生成） |
 | 安装脚本 | `dsh-mobile-ui/install.sh` —— 等价于 2.1 的手工步骤，另加 profile 备份与结果自查 |
 
@@ -47,7 +47,7 @@ cp -a ~/.dsh/profiles/web ~/.dsh/backups/web-profile-$(date +%Y%m%d-%H%M%S)
 ```sh
 dsh plugin --profile web add <来源>
 # 例：
-git clone git@gitee.com:rhtcai/dshplugin.git                               # 私有仓库，先拿到本仓库
+git clone --depth 1 https://github.com/kingcuty/dsh-plugin.git            # 公开仓库，无需凭据
 dsh plugin --profile web add ./dshplugin/dsh-mobile-ui            # 仓库里的插件目录（推荐）
 dsh plugin --profile web add ./dshplugin/dsh-mobile-ui/dist/dsh-mobile-ui-0.2.2.tgz  # 仓库里的 tarball
 dsh plugin --profile web add /abs/path/dsh-mobile-ui                      # 任意本地目录
@@ -150,11 +150,11 @@ dsh plugin --profile web add ./dsh-mobile-ui-0.2.2.tgz
 systemctl --user restart dsh-web
 ```
 
-或者**直接让对方用已提交的仓库**（最省事，不用发文件；仓库私有，对方账号需有访问权限）：
+或者**直接让对方用公开副本**（最省事，不用发文件，对方无需任何凭据）：
 
 ```sh
-git clone git@gitee.com:rhtcai/dshplugin.git
-dsh plugin --profile web add ./dshplugin/dsh-mobile-ui
+git clone --depth 1 https://github.com/kingcuty/dsh-plugin.git
+dsh plugin --profile web add ./dsh-plugin/dsh-mobile-ui
 systemctl --user restart dsh-web
 ```
 
