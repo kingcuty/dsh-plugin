@@ -4,6 +4,22 @@ DSH Web GUI 的移动端 UI 优化插件（iOS / Android / 鸿蒙 UA 生效）�
 
 > 部署到别的机器、升级适配与排障：见 [DEPLOY.md](./DEPLOY.md)。
 
+## 效果
+
+截图为 390×844 手机视口（安卓 / 鸿蒙 UA）实拍本机 DSH Web：
+
+| 手机 · 首屏 | 手机 · 侧栏抽屉 | 手机 · 设置整屏 |
+| --- | --- | --- |
+| <img src="docs/images/mobile-hero.png" width="230" alt="手机首屏：左上角抽屉把手，输入区铺满整屏"> | <img src="docs/images/mobile-drawer.png" width="230" alt="侧栏以抽屉形式覆盖在会话之上"> | <img src="docs/images/mobile-settings.png" width="230" alt="设置面板在手机上整屏化，底部为「移动端优化」开关"> |
+
+| 手机 · 输入区展开 | 手机 · 输入区收起 |
+| --- | --- |
+| <img src="docs/images/mobile-composer-expanded.png" width="230" alt="输入区展开：全宽输入卡片与工具行"> | <img src="docs/images/mobile-composer-collapsed.png" width="230" alt="输入区收起：右下角蓝色圆点，底部统计行常驻"> |
+
+桌面端（1280×900 视口）与官方完全一致，看不到任何插件痕迹——`data-dshm` 属性不会出现，窄桌窗口同理：
+
+<img src="docs/images/desktop-unchanged.png" width="720" alt="桌面端保持官方布局">
+
 ## 它做了什么
 
 | 区域 | 官方行为 | 本插件行为 |
