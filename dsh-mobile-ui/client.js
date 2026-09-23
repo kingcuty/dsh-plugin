@@ -1212,24 +1212,33 @@ html[data-dshm] *::-webkit-scrollbar {
           const reference = (collapsed
             ? document.querySelector('[data-dshm-fab]') ?? document.querySelector('[data-dshm-primary]')
             : document.querySelector('[data-dshm-primary]') ?? document.querySelector('[data-dshm-fab]'))
-          // Placed once, while the card is open, then kept: the collapsed stack is a
-          // card shorter, and the official layout parks the button above whichever
-          // stack is on screen — that is what made it move between the two states.
+          /*
+           * ONE screen seat in both states. The official slot moves with the composer
+           * stack (the collapsed stack is a card shorter), and a fixed translation
+           * cannot hold a screen position against a moving slot — so the vertical
+           * shift is re-derived on every refresh from a stack-independent target:
+           * the top of the expanded card, which is the stats row's top minus the last
+           * measured card height (the card always rests directly on that row).
+           * The horizontal shift only changes with the frame, so it is taken while the
+           * send button stands and kept afterwards.
+           */
           const cardForSeat = seam('card')
           const cardRect = cardForSeat === null ? null : cardForSeat.getBoundingClientRect()
-          if (reference !== null && frame !== null && !collapsed && cardRect !== null && cardRect.height > 0) {
+          const statsForSeat = seam('statsRow')
+          const statsRect = statsForSeat === null ? null : statsForSeat.getBoundingClientRect()
+          const cardHeight = Number.parseFloat(String(writtenVars.get('--dshm-card-height') ?? '')) || 0
+          if (frame !== null && statsRect !== null && statsRect.height > 0 && cardHeight > 0) {
             // The slot, not the button: the button carries the translation this code
             // applies, so measuring it would feed the shift back into itself.
             const slotRect = toBottomSlot.getBoundingClientRect()
             const buttonRect = toBottomButton.getBoundingClientRect()
-            const referenceRect = reference.getBoundingClientRect()
-            const shiftX = slotRect.right - buttonRect.width / 2 - (referenceRect.left + referenceRect.width / 2)
-            // Its bottom edge lands 8px above the card's top: the same free strip the
-            // official control uses, but expressed against the card instead of the
-            // stack of the moment.
-            const desiredCentreY = cardRect.top - 8 - buttonRect.height / 2
+            if (reference !== null && !collapsed && cardRect !== null && cardRect.height > 0) {
+              const referenceRect = reference.getBoundingClientRect()
+              const shiftX = slotRect.right - buttonRect.width / 2 - (referenceRect.left + referenceRect.width / 2)
+              setVar('--dshm-to-bottom-shift', Math.round(shiftX) + 'px')
+            }
+            const desiredCentreY = statsRect.top - cardHeight - 8 - buttonRect.height / 2
             const shiftY = desiredCentreY - (slotRect.top + slotRect.bottom) / 2
-            setVar('--dshm-to-bottom-shift', Math.round(shiftX) + 'px')
             setVar('--dshm-to-bottom-shift-y', Math.round(shiftY) + 'px')
           }
         }
