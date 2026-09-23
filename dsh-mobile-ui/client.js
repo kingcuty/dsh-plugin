@@ -1244,7 +1244,7 @@ html[data-dshm] *::-webkit-scrollbar {
           // Capture once, while the card is open: the send button's column and the free
           // strip just above the card. Later refreshes only convert that fixed screen
           // point into a translation against wherever the official slot happens to be.
-          if (!collapsed && reference !== null && cardRect !== null && cardRect.height > 0) {
+          if (toBottomSeat === null && !collapsed && reference !== null && cardRect !== null && cardRect.height > 0) {
             const buttonRect = toBottomButton.getBoundingClientRect()
             const referenceRect = reference.getBoundingClientRect()
             toBottomSeat = {
