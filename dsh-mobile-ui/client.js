@@ -677,8 +677,9 @@ html[data-dshm] [data-dshm-to-bottom] {
   bottom: auto !important;
   margin: 0 !important;
   translate: none !important;
-  transition: left var(--dshm-item-move, 320ms) var(--ds-ease-in-out),
-    top var(--dshm-item-move, 320ms) var(--ds-ease-in-out);
+  /* Horizontal only: the height is shared by both states, so the move between them
+     is a sideways slide from one reference control's column to the other's. */
+  transition: left var(--dshm-item-move, 320ms) var(--ds-ease-in-out);
 }
 
 /*
@@ -1253,11 +1254,18 @@ html[data-dshm] *::-webkit-scrollbar {
             }
           }
           if (toBottomSeat !== null) {
-            // Written every refresh, but from the stored seat: the CSS places the
-            // control at these viewport coordinates, so the official slot's own
-            // movement no longer has any say in where it lands.
+            /*
+             * Height comes from the stored seat (both states share it, so only the
+             * horizontal position moves), column comes from the reference control of
+             * the state on screen: the send button while expanded, the collapse
+             * toggle while collapsed. Their centre lines differ by the rail's column
+             * offset, which is exactly the sideways slide between the two states.
+             */
             const buttonBox = toBottomButton.getBoundingClientRect()
-            setVar('--dshm-to-bottom-left', Math.round(toBottomSeat.xc - buttonBox.width / 2) + 'px')
+            const columnReference = document.querySelector('[data-dshm-primary]') ?? document.querySelector('[data-dshm-fab]')
+            const columnRect = columnReference === null ? null : columnReference.getBoundingClientRect()
+            const columnXc = columnRect === null || columnRect.width === 0 ? toBottomSeat.xc : columnRect.left + columnRect.width / 2
+            setVar('--dshm-to-bottom-left', Math.round(columnXc - buttonBox.width / 2) + 'px')
             setVar('--dshm-to-bottom-top', Math.round(toBottomSeat.yc - buttonBox.height / 2) + 'px')
           }
         }
