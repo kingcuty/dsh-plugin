@@ -662,16 +662,14 @@ html[data-dshm][data-dshm-composer='collapsed'] [data-phase='active'] [data-goal
 }
 
 /*
- * The adapter aligns this with the round control of the current composer state —
- * the send button while expanded, the collapse toggle while collapsed — on BOTH
- * axes: the horizontal shift puts it in that control's column, the vertical one
- * puts its centre on that control's centre line, so the pair reads as one row
- * whatever the transcript's scroll position is when the composer expands.
+ * The adapter aligns this with the round control of the current composer state — the
+ * send button while expanded, the collapse toggle while collapsed — on the horizontal
+ * centre line, so it sits in that control's column. Its height stays the official
+ * one: the control floats above the composer stack by design, and pulling it down to
+ * the send button's centre would land it on top of the input card.
  */
 html[data-dshm] [data-dshm-to-bottom] {
-  translate:
-    calc(-1 * var(--dshm-to-bottom-shift, 0px))
-    var(--dshm-to-bottom-shift-y, 0px);
+  translate: calc(-1 * var(--dshm-to-bottom-shift, 0px)) 0;
   transition: translate var(--dshm-item-move, 320ms) var(--ds-ease-in-out);
 }
 
@@ -1220,9 +1218,8 @@ html[data-dshm] *::-webkit-scrollbar {
             const half = toBottomButton.getBoundingClientRect().width / 2
             const referenceRect = reference.getBoundingClientRect()
             const shiftX = slotRect.right - half - (referenceRect.left + referenceRect.width / 2)
-            const shiftY = (referenceRect.top + referenceRect.bottom) / 2 - (slotRect.top + slotRect.bottom) / 2
             setVar('--dshm-to-bottom-shift', Math.round(shiftX) + 'px')
-            setVar('--dshm-to-bottom-shift-y', Math.round(shiftY) + 'px')
+            clearVar('--dshm-to-bottom-shift-y')
           }
         }
         const cardForInert = seam('card')
