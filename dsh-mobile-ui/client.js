@@ -1263,11 +1263,23 @@ html[data-dshm] *::-webkit-scrollbar {
              */
             const buttonBox = toBottomButton.getBoundingClientRect()
             const collapsedNow = document.documentElement.getAttribute('data-dshm-composer') === 'collapsed'
-            const columnReference = (collapsedNow
-              ? document.querySelector('[data-dshm-fab]') ?? document.querySelector('[data-dshm-primary]')
-              : document.querySelector('[data-dshm-primary]') ?? document.querySelector('[data-dshm-fab]'))
-            const columnRect = columnReference === null ? null : columnReference.getBoundingClientRect()
-            const columnXc = columnRect === null || columnRect.width === 0 ? toBottomSeat.xc : columnRect.left + columnRect.width / 2
+            /*
+             * Both columns come from geometry that does not move during a toggle. The
+             * send button's own box does move (it fades and slides with the card), and
+             * measuring it mid-transition is what left the control 14px off its column
+             * after an expand. Its seat is the card's right edge (a cached inset from
+             * the frame) minus the CSS offset of 12px and half the button; the toggle
+             * is position: fixed at a fixed right inset, so its live box is stable.
+             */
+            let columnXc = toBottomSeat.xc
+            if (collapsedNow) {
+              const toggle = document.querySelector('[data-dshm-fab]')
+              const toggleRect = toggle === null ? null : toggle.getBoundingClientRect()
+              if (toggleRect !== null && toggleRect.width > 0) columnXc = toggleRect.left + toggleRect.width / 2
+            } else {
+              const cardRight = Number.parseFloat(String(writtenVars.get('--dshm-card-right') ?? ''))
+              if (Number.isFinite(cardRight)) columnXc = window.innerWidth - cardRight - 12 - buttonBox.width / 2
+            }
             setVar('--dshm-to-bottom-left', Math.round(columnXc - buttonBox.width / 2) + 'px')
             setVar('--dshm-to-bottom-top', Math.round(toBottomSeat.yc - buttonBox.height / 2) + 'px')
           }
