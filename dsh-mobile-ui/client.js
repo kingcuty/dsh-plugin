@@ -1264,6 +1264,25 @@ html[data-dshm] *::-webkit-scrollbar {
               yc: levelYc,
             }
           }
+          /*
+           * The level line must exist before the first capture too: a page that loads
+           * collapsed (the normal case after a refresh) has not opened the card yet, so
+           * there is no captured seat — and an unset seat leaves the fixed control at
+           * its static position, which is what made it disappear when scrolling up.
+           * The rail's own geometry supplies it: the model chip rests 60px above the
+           * collapse toggle's top (toggle top - 6 - 32 for the context chip, - 6 - 32
+           * again for the model chip, + 16 for its centre), and the toggle is fixed, so
+           * that line is available in both states without the chips' own translation.
+           */
+          const toggleForLevel = document.querySelector('[data-dshm-fab]')
+          const toggleLevelRect = toggleForLevel === null ? null : toggleForLevel.getBoundingClientRect()
+          const railLevelYc = toggleLevelRect !== null && toggleLevelRect.height > 0 ? toggleLevelRect.top - 60 : null
+          const railLevelXc = toggleLevelRect !== null && toggleLevelRect.width > 0
+            ? toggleLevelRect.left + toggleLevelRect.width / 2
+            : null
+          if (toBottomSeat === null && railLevelYc !== null && railLevelXc !== null) {
+            toBottomSeat = { xc: railLevelXc, yc: railLevelYc }
+          }
           if (toBottomSeat !== null) {
             /*
              * Height comes from the stored seat (both states share it, so only the
