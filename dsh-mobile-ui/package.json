@@ -1,6 +1,6 @@
 {
   "name": "dsh-mobile-ui",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "Mobile UI optimisation for the DSH Web GUI: an off-canvas sidebar drawer and a collapsible composer, for iOS / Android / HarmonyOS phone frames.",
   "type": "module",
   "exports": {

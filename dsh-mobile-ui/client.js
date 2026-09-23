@@ -662,14 +662,15 @@ html[data-dshm][data-dshm-composer='collapsed'] [data-phase='active'] [data-goal
 }
 
 /*
- * The adapter aligns this with the round control of the current composer state — the
- * send button while expanded, the collapse toggle while collapsed — on the horizontal
- * centre line, so it sits in that control's column. Its height stays the official
- * one: the control floats above the composer stack by design, and pulling it down to
- * the send button's centre would land it on top of the input card.
+ * The adapter parks this control in ONE spot that both composer states share: in the
+ * send button's column and just above the input card, measured while the card is open
+ * and then kept (the collapsed stack is 52px shorter, so recomputing from the official
+ * layout would let the button drift every time the composer toggles).
  */
 html[data-dshm] [data-dshm-to-bottom] {
-  translate: calc(-1 * var(--dshm-to-bottom-shift, 0px)) 0;
+  translate:
+    calc(-1 * var(--dshm-to-bottom-shift, 0px))
+    var(--dshm-to-bottom-shift-y, 0px);
   transition: translate var(--dshm-item-move, 320ms) var(--ds-ease-in-out);
 }
 
@@ -1211,15 +1212,25 @@ html[data-dshm] *::-webkit-scrollbar {
           const reference = (collapsed
             ? document.querySelector('[data-dshm-fab]') ?? document.querySelector('[data-dshm-primary]')
             : document.querySelector('[data-dshm-primary]') ?? document.querySelector('[data-dshm-fab]'))
-          if (reference !== null && frame !== null) {
+          // Placed once, while the card is open, then kept: the collapsed stack is a
+          // card shorter, and the official layout parks the button above whichever
+          // stack is on screen — that is what made it move between the two states.
+          const cardForSeat = seam('card')
+          const cardRect = cardForSeat === null ? null : cardForSeat.getBoundingClientRect()
+          if (reference !== null && frame !== null && !collapsed && cardRect !== null && cardRect.height > 0) {
             // The slot, not the button: the button carries the translation this code
             // applies, so measuring it would feed the shift back into itself.
             const slotRect = toBottomSlot.getBoundingClientRect()
-            const half = toBottomButton.getBoundingClientRect().width / 2
+            const buttonRect = toBottomButton.getBoundingClientRect()
             const referenceRect = reference.getBoundingClientRect()
-            const shiftX = slotRect.right - half - (referenceRect.left + referenceRect.width / 2)
+            const shiftX = slotRect.right - buttonRect.width / 2 - (referenceRect.left + referenceRect.width / 2)
+            // Its bottom edge lands 8px above the card's top: the same free strip the
+            // official control uses, but expressed against the card instead of the
+            // stack of the moment.
+            const desiredCentreY = cardRect.top - 8 - buttonRect.height / 2
+            const shiftY = desiredCentreY - (slotRect.top + slotRect.bottom) / 2
             setVar('--dshm-to-bottom-shift', Math.round(shiftX) + 'px')
-            clearVar('--dshm-to-bottom-shift-y')
+            setVar('--dshm-to-bottom-shift-y', Math.round(shiftY) + 'px')
           }
         }
         const cardForInert = seam('card')
