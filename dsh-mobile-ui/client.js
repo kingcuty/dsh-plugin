@@ -662,16 +662,23 @@ html[data-dshm][data-dshm-composer='collapsed'] [data-phase='active'] [data-goal
 }
 
 /*
- * The adapter parks this control in ONE spot that both composer states share: in the
- * send button's column and just above the input card, measured while the card is open
- * and then kept (the collapsed stack is 52px shorter, so recomputing from the official
- * layout would let the button drift every time the composer toggles).
+ * The adapter gives this control an absolute screen seat instead of compensating for
+ * the official one. A translation cannot hold a screen position while the slot it
+ * lives in keeps moving (the slot follows the composer stack, and the stack is a card
+ * taller when expanded), so the button is taken out of that flow entirely: fixed at
+ * the seat the adapter computed while the card was open. It keeps the send button's
+ * column and clears the card's top edge by 8px whether the composer is open or closed.
  */
 html[data-dshm] [data-dshm-to-bottom] {
-  translate:
-    calc(-1 * var(--dshm-to-bottom-shift, 0px))
-    var(--dshm-to-bottom-shift-y, 0px);
-  transition: translate var(--dshm-item-move, 320ms) var(--ds-ease-in-out);
+  position: fixed !important;
+  left: var(--dshm-to-bottom-left, auto) !important;
+  top: var(--dshm-to-bottom-top, auto) !important;
+  right: auto !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  translate: none !important;
+  transition: left var(--dshm-item-move, 320ms) var(--ds-ease-in-out),
+    top var(--dshm-item-move, 320ms) var(--ds-ease-in-out);
 }
 
 /*
@@ -1246,11 +1253,12 @@ html[data-dshm] *::-webkit-scrollbar {
             }
           }
           if (toBottomSeat !== null) {
-            // The slot, not the button: the button carries the translation this code
-            // applies, so measuring it would feed the shift back into itself.
-            const slotRect = toBottomSlot.getBoundingClientRect()
-            setVar('--dshm-to-bottom-shift', Math.round(toBottomSeat.xc - (slotRect.left + slotRect.right) / 2) + 'px')
-            setVar('--dshm-to-bottom-shift-y', Math.round(toBottomSeat.yc - (slotRect.top + slotRect.bottom) / 2) + 'px')
+            // Written every refresh, but from the stored seat: the CSS places the
+            // control at these viewport coordinates, so the official slot's own
+            // movement no longer has any say in where it lands.
+            const buttonBox = toBottomButton.getBoundingClientRect()
+            setVar('--dshm-to-bottom-left', Math.round(toBottomSeat.xc - buttonBox.width / 2) + 'px')
+            setVar('--dshm-to-bottom-top', Math.round(toBottomSeat.yc - buttonBox.height / 2) + 'px')
           }
         }
         const cardForInert = seam('card')
