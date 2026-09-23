@@ -663,12 +663,15 @@ html[data-dshm][data-dshm-composer='collapsed'] [data-phase='active'] [data-goal
 
 /*
  * The adapter aligns this with the round control of the current composer state —
- * the send button while expanded, the collapse toggle while collapsed — so the
- * pair always shares one vertical centre line and the control rail keeps its
- * column to itself.
+ * the send button while expanded, the collapse toggle while collapsed — on BOTH
+ * axes: the horizontal shift puts it in that control's column, the vertical one
+ * puts its centre on that control's centre line, so the pair reads as one row
+ * whatever the transcript's scroll position is when the composer expands.
  */
 html[data-dshm] [data-dshm-to-bottom] {
-  translate: calc(-1 * var(--dshm-to-bottom-shift, 0px)) 0;
+  translate:
+    calc(-1 * var(--dshm-to-bottom-shift, 0px))
+    var(--dshm-to-bottom-shift-y, 0px);
   transition: translate var(--dshm-item-move, 320ms) var(--ds-ease-in-out);
 }
 
@@ -1211,11 +1214,15 @@ html[data-dshm] *::-webkit-scrollbar {
             ? document.querySelector('[data-dshm-fab]') ?? document.querySelector('[data-dshm-primary]')
             : document.querySelector('[data-dshm-primary]') ?? document.querySelector('[data-dshm-fab]'))
           if (reference !== null && frame !== null) {
-            const slotRight = toBottomSlot.getBoundingClientRect().right
+            // The slot, not the button: the button carries the translation this code
+            // applies, so measuring it would feed the shift back into itself.
+            const slotRect = toBottomSlot.getBoundingClientRect()
             const half = toBottomButton.getBoundingClientRect().width / 2
             const referenceRect = reference.getBoundingClientRect()
-            const shift = slotRight - half - (referenceRect.left + referenceRect.width / 2)
-            setVar('--dshm-to-bottom-shift', Math.round(shift) + 'px')
+            const shiftX = slotRect.right - half - (referenceRect.left + referenceRect.width / 2)
+            const shiftY = (referenceRect.top + referenceRect.bottom) / 2 - (slotRect.top + slotRect.bottom) / 2
+            setVar('--dshm-to-bottom-shift', Math.round(shiftX) + 'px')
+            setVar('--dshm-to-bottom-shift-y', Math.round(shiftY) + 'px')
           }
         }
         const cardForInert = seam('card')
