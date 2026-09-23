@@ -1262,7 +1262,10 @@ html[data-dshm] *::-webkit-scrollbar {
              * offset, which is exactly the sideways slide between the two states.
              */
             const buttonBox = toBottomButton.getBoundingClientRect()
-            const columnReference = document.querySelector('[data-dshm-primary]') ?? document.querySelector('[data-dshm-fab]')
+            const collapsedNow = document.documentElement.getAttribute('data-dshm-composer') === 'collapsed'
+            const columnReference = (collapsedNow
+              ? document.querySelector('[data-dshm-fab]') ?? document.querySelector('[data-dshm-primary]')
+              : document.querySelector('[data-dshm-primary]') ?? document.querySelector('[data-dshm-fab]'))
             const columnRect = columnReference === null ? null : columnReference.getBoundingClientRect()
             const columnXc = columnRect === null || columnRect.width === 0 ? toBottomSeat.xc : columnRect.left + columnRect.width / 2
             setVar('--dshm-to-bottom-left', Math.round(columnXc - buttonBox.width / 2) + 'px')
@@ -1555,6 +1558,15 @@ html[data-dshm] *::-webkit-scrollbar {
         const heavy = transcriptWeight() > ANIMATED_NODES_MAX
         if (card === null || heavy || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           mutate()
+          // No transition runs here, so no transitionend will schedule the settling
+          // refresh either: without these two the adapter keeps the placements it
+          // measured mid-toggle (they are what put the back-to-bottom control 16px
+          // off its column on a long transcript).
+          const settleAfterStep = () => {
+            requestRefresh()
+            window.setTimeout(() => { requestRefresh() }, 140)
+          }
+          window.requestAnimationFrame(settleAfterStep)
           return
         }
         if (pendingSettle !== null) {
