@@ -49,7 +49,7 @@ dsh plugin --profile web add <来源>
 # 例：
 git clone --depth 1 https://github.com/kingcuty/dsh-plugin.git            # 公开仓库，无需凭据
 dsh plugin --profile web add ./dshplugin/dsh-mobile-ui            # 仓库里的插件目录（推荐）
-dsh plugin --profile web add ./dshplugin/dsh-mobile-ui/dist/dsh-mobile-ui-0.2.13.tgz  # 仓库里的 tarball
+dsh plugin --profile web add ./dshplugin/dsh-mobile-ui/dist/dsh-mobile-ui-0.2.14.tgz  # 仓库里的 tarball
 dsh plugin --profile web add /abs/path/dsh-mobile-ui                      # 任意本地目录
 dsh plugin --profile web add dsh-mobile-ui                                # npm 上（发布后）
 
@@ -140,13 +140,13 @@ systemctl --user restart dsh-web     # 热加载只增不减，已挂载的行�
 ## 7. 分享给别人
 
 ```sh
-npm pack --pack-destination dist        # 生成 dist/dsh-mobile-ui-0.2.13.tgz
+npm pack --pack-destination dist        # 生成 dist/dsh-mobile-ui-0.2.14.tgz
 ```
 
 把 tarball 发给对方，对方执行：
 
 ```sh
-dsh plugin --profile web add ./dsh-mobile-ui-0.2.13.tgz
+dsh plugin --profile web add ./dsh-mobile-ui-0.2.14.tgz
 systemctl --user restart dsh-web
 ```
 
