@@ -1280,8 +1280,23 @@ html[data-dshm] *::-webkit-scrollbar {
               const cardRight = Number.parseFloat(String(writtenVars.get('--dshm-card-right') ?? ''))
               if (Number.isFinite(cardRight)) columnXc = window.innerWidth - cardRight - 12 - buttonBox.width / 2
             }
+            /*
+             * Height follows the rail's model chip (the last one before the context
+             * meter), so the control reads as part of that column: same shape, same
+             * column, level with a chip the eye already uses as the column's rhythm.
+             * The rail is position: fixed, so that chip's box is stable in both
+             * composer states and the height never moves between them.
+             */
+            const railChips = document.querySelectorAll(
+              "[data-phase='active'] [data-composer-card] > :last-child button:not([data-dshm-primary])",
+            )
+            const modelChip = railChips.length >= 3 ? railChips[railChips.length - 2] : null
+            const modelRect = modelChip === null ? null : modelChip.getBoundingClientRect()
+            const seatYc = modelRect !== null && modelRect.height > 0
+              ? modelRect.top + modelRect.height / 2
+              : toBottomSeat.yc
             setVar('--dshm-to-bottom-left', Math.round(columnXc - buttonBox.width / 2) + 'px')
-            setVar('--dshm-to-bottom-top', Math.round(toBottomSeat.yc - buttonBox.height / 2) + 'px')
+            setVar('--dshm-to-bottom-top', Math.round(seatYc - buttonBox.height / 2) + 'px')
           }
         }
         const cardForInert = seam('card')
