@@ -1131,6 +1131,15 @@ html[data-dshm] *::-webkit-scrollbar {
       let controlsGuard = null
       let placementFrame = null
       let placementTimer = null
+      /*
+       * Absolute screen seat of the official "back to bottom" control, captured while
+       * the composer card is open and reused verbatim in both states. It is a stored
+       * pair of numbers rather than a live anchor on purpose: the official slot moves
+       * with the composer stack, and every anchor that moves with that stack (the
+       * stats row included) lets the control drift by the card's height when the
+       * composer toggles.
+       */
+      let toBottomSeat = null
 
       /**
        * A picker measures itself while it mounts, so one read can catch a panel
@@ -1223,20 +1232,25 @@ html[data-dshm] *::-webkit-scrollbar {
            * states. Everything here reads cached values, so neither target depends on
            * which composer state is on screen.
            */
-          const statsForSeat = seam('statsRow')
-          const statsRect = statsForSeat === null ? null : statsForSeat.getBoundingClientRect()
-          const cardHeight = Number.parseFloat(String(writtenVars.get('--dshm-card-height') ?? ''))
-          const cardRight = Number.parseFloat(String(writtenVars.get('--dshm-card-right') ?? ''))
-          if (frame !== null && statsRect !== null && statsRect.height > 0
-            && Number.isFinite(cardHeight) && cardHeight > 0 && Number.isFinite(cardRight)) {
+          const cardForSeat = seam('card')
+          const cardRect = cardForSeat === null ? null : cardForSeat.getBoundingClientRect()
+          // Capture once, while the card is open: the send button's column and the free
+          // strip just above the card. Later refreshes only convert that fixed screen
+          // point into a translation against wherever the official slot happens to be.
+          if (!collapsed && reference !== null && cardRect !== null && cardRect.height > 0) {
+            const buttonRect = toBottomButton.getBoundingClientRect()
+            const referenceRect = reference.getBoundingClientRect()
+            toBottomSeat = {
+              xc: referenceRect.left + referenceRect.width / 2,
+              yc: cardRect.top - 8 - buttonRect.height / 2,
+            }
+          }
+          if (toBottomSeat !== null) {
             // The slot, not the button: the button carries the translation this code
             // applies, so measuring it would feed the shift back into itself.
             const slotRect = toBottomSlot.getBoundingClientRect()
-            const buttonRect = toBottomButton.getBoundingClientRect()
-            const targetX = window.innerWidth - cardRight - 9 - buttonRect.width / 2
-            const targetY = statsRect.top - cardHeight - 8 - buttonRect.height / 2
-            setVar('--dshm-to-bottom-shift', Math.round(targetX - (slotRect.left + slotRect.right) / 2) + 'px')
-            setVar('--dshm-to-bottom-shift-y', Math.round(targetY - (slotRect.top + slotRect.bottom) / 2) + 'px')
+            setVar('--dshm-to-bottom-shift', Math.round(toBottomSeat.xc - (slotRect.left + slotRect.right) / 2) + 'px')
+            setVar('--dshm-to-bottom-shift-y', Math.round(toBottomSeat.yc - (slotRect.top + slotRect.bottom) / 2) + 'px')
           }
         }
         const cardForInert = seam('card')
@@ -1282,8 +1296,10 @@ html[data-dshm] *::-webkit-scrollbar {
         const nextFrame = layer === null ? null : layer.parentElement
         if (nextFrame !== frame) {
           frame = nextFrame
-          // A fresh frame element carries none of the variables this adapter writes.
+          // A fresh frame element carries none of the variables this adapter writes,
+          // and a stored screen coordinate belongs to the old frame's geometry.
           writtenVars.clear()
+          toBottomSeat = null
           if (frameResize !== null) { frameResize.disconnect(); frameResize = null }
           if (frameAttributes !== null) { frameAttributes.disconnect(); frameAttributes = null }
           if (frame !== null) {
