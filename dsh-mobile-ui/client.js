@@ -223,14 +223,19 @@ html[data-dshm] [data-dshm-frame] [data-side] { display: none; }
 }
 
 /*
- * Settings on phones. The official panel reserves a 188px nav rail inside a
+ * Settings on phones ONLY: :has(> nav) selects the settings shell, not every modal —
+ * the shared Modal primitive (the permission/risk confirmation) is also
+ * [role=dialog][aria-modal=true], and styling it as a phone sheet stretched its
+ * content over a full screen with a huge empty middle.
+ *
+ * The official panel reserves a 188px nav rail inside a
  * max-width: calc(100vw - 48px) box, so on a 390px frame the content column is
  * ~100px wide and every label wraps to one character per line. As a phone sheet the
  * panel turns into a column, the rail becomes a scrollable chip strip, and every
  * row gets the full width. Scoped to html[data-dshm], so the Settings switch turns
  * this off together with the rest.
  */
-html[data-dshm] [role='dialog'][aria-modal='true'] {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) {
   flex-direction: column;
   width: calc(100vw - 16px);
   max-width: calc(100vw - 16px);
@@ -244,13 +249,13 @@ html[data-dshm] [role='dialog'][aria-modal='true'] {
  * without min-height: 0 a column flex child keeps its content height, the panel's
  * overflow: hidden clips it, and the inner scroller never gets a viewport.
  */
-html[data-dshm] [role='dialog'][aria-modal='true'] > :not(nav) {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) > :not(nav) {
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
 }
 
-html[data-dshm] [role='dialog'][aria-modal='true'] nav {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) nav {
   flex-direction: row;
   align-items: center;
   gap: 8px;
@@ -260,16 +265,16 @@ html[data-dshm] [role='dialog'][aria-modal='true'] nav {
 }
 
 /* The 设置 / Settings title moves out: the content header already names the section. */
-html[data-dshm] [role='dialog'][aria-modal='true'] nav > :first-child {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) nav > :first-child {
   display: none;
 }
 
-html[data-dshm] [role='dialog'][aria-modal='true'] nav > :last-child {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) nav > :last-child {
   flex-direction: row;
   gap: 8px;
 }
 
-html[data-dshm] [role='dialog'][aria-modal='true'] nav button {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) nav button {
   flex: none;
   height: 32px;
   padding: 0 14px;
@@ -278,16 +283,16 @@ html[data-dshm] [role='dialog'][aria-modal='true'] nav button {
 }
 
 /* Chips read as labels; the section icons stay on the desktop panel. */
-html[data-dshm] [role='dialog'][aria-modal='true'] nav button svg {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) nav button svg {
   display: none;
 }
 
 /* Appearance cubes: three across instead of three stacked. */
-html[data-dshm] [role='dialog'][aria-modal='true'] [class*='cubeRow'] {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) [class*='cubeRow'] {
   flex-wrap: nowrap;
 }
 
-html[data-dshm] [role='dialog'][aria-modal='true'] [class*='themeCube'] {
+html[data-dshm] [role='dialog'][aria-modal='true']:has(> nav) [class*='themeCube'] {
   flex: 1 1 0;
   padding: 12px 6px;
   border-radius: 14px;
