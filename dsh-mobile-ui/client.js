@@ -674,6 +674,21 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
  * squeezed into an ellipsis next to the context ring; only a genuinely narrow phone
  * still truncates. The ring keeps its own slot at the end of its group.
  */
+/*
+ * Text inside the pills ellipsises in its own box instead of running under the next
+ * icon: with three pills on a phone the row is narrower than their natural widths,
+ * and the context ring used to be painted on top of the truncated cache-hit label.
+ * Only text-only spans are clipped, so pill wrappers keep their icon slots intact.
+ */
+html[data-dshm] [data-phase='active'] [data-composer-stats] span:not(:has(svg)) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-dshm] [data-phase='active'] [data-composer-stats] svg {
+  flex: none !important;
+}
+
 html[data-dshm] [data-phase='active'] [data-composer-stats] > * {
   flex: 0 1 auto !important;
   min-width: 0 !important;
