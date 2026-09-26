@@ -203,9 +203,11 @@ html[data-dshm] [data-dshm-frame] [data-side] { display: none; }
   justify-content: center;
   width: 28px;
   height: 28px;
-  padding: 6px;
+  /* The official corner control is a 28px box with no padding and an 8px corner;
+     matching it keeps the two icons identical in size and in press feedback. */
+  padding: 0;
   border: none;
-  border-radius: 28px;
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -918,22 +920,38 @@ html[data-dshm] *::-webkit-scrollbar {
        * upgrade), and a missing name left the corner controls as empty boxes. Each
        * control therefore falls back to an inline Tabler-style glyph of its own.
        */
+      /*
+       * panel-left is the OFFICIAL header glyph mirrored: the host draws the
+       * right-sidebar control as a 16pt rounded rect with its divider bar at x=5.5
+       * and a 1px stroke, so the left handle uses the same drawing with the bar at
+       * 16 - 5.5 = 10.5. Same 15px box, same 1px stroke, same optical centre.
+       */
       const FALLBACK_PATHS = {
-        'panel-left': ['M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5z', 'M9.5 4v16'],
-        'chevron-down': ['M6 9l6 6 6-6'],
-        'chevron-up': ['M6 15l6-6 6 6'],
+        'panel-left': {
+          viewBox: '0 0 16 16',
+          stroke: 1,
+          paths: [
+            'M13.5 1.5H2.5C1.94772 1.5 1.5 1.94772 1.5 2.5V13.5C1.5 14.0523 1.94772 14.5 2.5 14.5H13.5C14.0523 14.5 14.5 14.0523 14.5 13.5V2.5C14.5 1.94772 14.0523 1.5 13.5 1.5Z',
+            'M10.5 1.5V14.5',
+          ],
+        },
+        'chevron-down': { viewBox: '0 0 24 24', stroke: 2, paths: ['M6 9l6 6 6-6'] },
+        'chevron-up': { viewBox: '0 0 24 24', stroke: 2, paths: ['M6 15l6-6 6 6'] },
       }
-      const fallbackIcon = (kind, size) => h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 24 24',
-        fill: 'none',
-        stroke: 'currentColor',
-        'stroke-width': 2,
-        'stroke-linecap': 'round',
-        'stroke-linejoin': 'round',
-        'aria-hidden': 'true',
-      }, FALLBACK_PATHS[kind].map((d, index) => h('path', { d, key: index })))
+      const fallbackIcon = (kind, size) => {
+        const spec = FALLBACK_PATHS[kind]
+        return h('svg', {
+          width: size,
+          height: size,
+          viewBox: spec.viewBox,
+          fill: 'none',
+          stroke: 'currentColor',
+          'stroke-width': spec.stroke,
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          'aria-hidden': 'true',
+        }, spec.paths.map((d, index) => h('path', { d, key: index })))
+      }
 
     function SidebarChrome({ useShell, toggleSidebar, requestRefresh, useSessions, usePanelInfo, t }) {
       // Mounting means the shell has rendered: let the adapter attach now
