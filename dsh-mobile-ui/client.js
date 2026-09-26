@@ -942,6 +942,29 @@ html[data-dshm] *::-webkit-scrollbar {
           onClick: () => { toggleSidebar() },
         })
       }
+      /*
+       * Icons live in the shared primitives, but those export names move between DSH
+       * releases (IconPanelLeftOutline16 / IconChevronUpOutline14 disappeared in one
+       * upgrade), and a missing name left the corner controls as empty boxes. Each
+       * control therefore falls back to an inline Tabler-style glyph of its own.
+       */
+      const FALLBACK_PATHS = {
+        'panel-left': ['M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5z', 'M9.5 4v16'],
+        'chevron-down': ['M6 9l6 6 6-6'],
+        'chevron-up': ['M6 15l6-6 6 6'],
+      }
+      const fallbackIcon = (kind, size) => h('svg', {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: 'currentColor',
+        'stroke-width': 2,
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+        'aria-hidden': 'true',
+      }, FALLBACK_PATHS[kind].map((d, index) => h('path', { d, key: index })))
+
       const Icon = primitives.IconPanelLeftOutline16
       return h('button', {
         type: 'button',
@@ -949,7 +972,7 @@ html[data-dshm] *::-webkit-scrollbar {
         'data-dshm-handle': '',
         'aria-label': t('sidebar.open'),
         onClick: () => { toggleSidebar() },
-      }, Icon === undefined ? null : h(Icon, { size: 16 }))
+      }, Icon === undefined ? fallbackIcon('panel-left', 16) : h(Icon, { size: 16 }))
     }
 
     /**
@@ -1013,7 +1036,7 @@ html[data-dshm] *::-webkit-scrollbar {
         'data-dshm-fab': '',
         'aria-label': t(collapsed ? 'composer.expand' : 'composer.collapse'),
         onClick: () => { setComposer(collapsed ? 'expanded' : 'collapsed') },
-      }, Icon === undefined ? null : h(Icon, { size: 16 }))
+      }, Icon === undefined ? fallbackIcon(collapsed ? 'chevron-up' : 'chevron-down', 16) : h(Icon, { size: 16 }))
     }
 
     /**
