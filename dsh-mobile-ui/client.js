@@ -665,8 +665,10 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
      figures before anything truncates. */
   padding-left: 0 !important;
   padding-right: 0 !important;
-  /* Measured by the adapter: the offset that lands the row on the frame's centre. */
-  translate: var(--dshm-stats-shift, 0px) 0;
+  /* No adapter shift: the row IS the frame's width (100vw) and its content is centred
+     by justify-content, so any extra translate would push the whole line sideways. */
+  translate: none !important;
+  overflow: hidden !important;
 }
 
 /*
@@ -709,6 +711,14 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] svg {
   flex: none !important;
 }
 
+html[data-dshm] [data-phase='active'] [data-composer-stats] [class*='pill'] {
+  min-width: 0 !important;
+  flex-shrink: 1 !important;
+}
+html[data-dshm] [data-phase='active'] [data-composer-stats] [class*='anchor'] {
+  min-width: 0 !important;
+  flex-shrink: 1 !important;
+}
 html[data-dshm] [data-phase='active'] [data-composer-stats] > * {
   flex: 0 1 auto !important;
   min-width: 0 !important;
