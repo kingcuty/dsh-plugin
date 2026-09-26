@@ -685,6 +685,26 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] span:not(:has(svg)) 
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/*
+ * Three pills now share this line (turns/steps/tok-s, tokens/cache, context %), which
+ * is more text than a phone frame holds at the official metrics. Tighten the row's own
+ * spacing rather than its content: a smaller row gap, pill padding, inner gap, font and
+ * icon still keep every figure legible at 11px, and whatever still does not fit
+ * ellipsises inside its own pill.
+ */
+html[data-dshm] [data-phase='active'] [data-composer-stats] {
+  gap: 4px !important;
+  font-size: 11px !important;
+}
+html[data-dshm] [data-phase='active'] [data-composer-stats] [class*='pill'] {
+  padding: 1px 3px !important;
+  gap: 4px !important;
+}
+html[data-dshm] [data-phase='active'] [data-composer-stats] svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
 html[data-dshm] [data-phase='active'] [data-composer-stats] svg {
   flex: none !important;
 }
