@@ -78,6 +78,13 @@ const reportMissingSeams = (root = document) => {
     const NARROW_MAX = 1024
     /** User-agent families whose platforms get the phone presentation. */
     const MOBILE_PLATFORM = /Android|iPhone|iPad|iPod|HarmonyOS|OpenHarmony|ArkWeb/i
+    /*
+     * Quiet period before a structural change is measured. One pass costs a whole
+     * frame on a phone, so a burst of changes (mounting a long conversation) must
+     * settle first; short enough that a geometry change still lands in about a
+     * tenth of a second.
+     */
+    const REFRESH_DEBOUNCE_MS = 150
 
     /*
      * The Settings → General switch. Stored per browser profile, which is the right
@@ -1250,6 +1257,7 @@ html[data-dshm] *::-webkit-scrollbar {
       let frameAttributes = null
       let phaseAttributes = null
       let bodyChildren = null
+      let refreshTimer = null
       let controlsRoot = null
       let controlsObservers = []
       let controlsGuard = null
@@ -1487,10 +1495,10 @@ html[data-dshm] *::-webkit-scrollbar {
             tag(frame.children[1], 'data-dshm-center')
             tag(frame.children[2], 'data-dshm-right')
             if (typeof ResizeObserver === 'function') {
-              frameResize = new ResizeObserver(() => { refresh() })
+              frameResize = new ResizeObserver(scheduleRefresh)
               frameResize.observe(frame)
             }
-            frameAttributes = new MutationObserver(() => { refresh() })
+            frameAttributes = new MutationObserver(scheduleRefresh)
             frameAttributes.observe(frame, { attributes: true, attributeFilter: ['style', 'data-sidebar-collapsed'] })
           }
         }
@@ -1499,7 +1507,7 @@ html[data-dshm] *::-webkit-scrollbar {
           conversationRoot = nextRoot
           if (phaseAttributes !== null) { phaseAttributes.disconnect(); phaseAttributes = null }
           if (conversationRoot !== null) {
-            phaseAttributes = new MutationObserver(() => { refresh() })
+            phaseAttributes = new MutationObserver(scheduleRefresh)
             phaseAttributes.observe(conversationRoot, { attributes: true, attributeFilter: ['data-phase'] })
           }
         }
@@ -1646,7 +1654,23 @@ html[data-dshm] *::-webkit-scrollbar {
       }
 
       const unsubscribe = store.subscribe(() => { refresh() })
-      bodyChildren = new MutationObserver(() => { refresh() })
+      /*
+       * Collapse a burst of structural changes into one measurement after the
+       * burst, never one per change and never one per frame. Mounting a long
+       * conversation inserts thousands of transcript nodes, and each pass walks
+       * the whole document and forces layout; at one pass per frame the phone
+       * spent every frame measuring, so taps and scrolling stopped answering
+       * until a reload. The store subscription above still refreshes at once, so
+       * a direct interaction never waits on this delay.
+       */
+      const scheduleRefresh = () => {
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+        refreshTimer = window.setTimeout(() => {
+          refreshTimer = null
+          refresh()
+        }, REFRESH_DEBOUNCE_MS)
+      }
+      bodyChildren = new MutationObserver(scheduleRefresh)
       bodyChildren.observe(document.body, { childList: true, subtree: true })
       // The shell renders inside its own root element, so a boot that happens
       // after this plugin loads produces no body child change to observe: one
@@ -1666,6 +1690,7 @@ html[data-dshm] *::-webkit-scrollbar {
         for (const observer of controlsObservers) observer.disconnect()
         if (controlsRoot !== null && controlsGuard !== null) controlsRoot.removeEventListener('mousedown', controlsGuard, true)
         if (placementFrame !== null) window.cancelAnimationFrame(placementFrame)
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer)
         if (placementTimer !== null) window.clearTimeout(placementTimer)
         const html = document.documentElement
         html.removeAttribute('data-dshm')
