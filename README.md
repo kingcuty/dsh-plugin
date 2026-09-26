@@ -53,7 +53,7 @@ GitHub 副本是公开的，raw 链接稳定且无需任何凭据——把下面
 
 ```sh
 curl -fL -o /tmp/dsh-mobile-ui.tgz \
-  https://raw.githubusercontent.com/kingcuty/dsh-plugin/main/dsh-mobile-ui/dist/dsh-mobile-ui-0.3.5.tgz
+  https://raw.githubusercontent.com/kingcuty/dsh-plugin/main/dsh-mobile-ui/dist/dsh-mobile-ui-0.3.6.tgz
 dsh plugin --profile web add /tmp/dsh-mobile-ui.tgz
 systemctl --user restart dsh-web        # 首次装完重启一次
 ```
