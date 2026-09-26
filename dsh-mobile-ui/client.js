@@ -660,11 +660,11 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
      truncated text. flex: none keeps the full frame width. */
   flex: none !important;
   min-width: 0 !important;
-  /* Only a token inset: the row runs to the screen edges and its own centred
-     content decides where the pills sit, so a phone with a little less room still
-     fits their text before it truncates. */
-  padding-left: 8px !important;
-  padding-right: 8px !important;
+  /* No inset at all: the row spans the frame edge to edge and its centred content
+     decides where the pills sit, so on a phone every available pixel goes to the
+     figures before anything truncates. */
+  padding-left: 0 !important;
+  padding-right: 0 !important;
   /* Measured by the adapter: the offset that lands the row on the frame's centre. */
   translate: var(--dshm-stats-shift, 0px) 0;
 }
