@@ -959,10 +959,12 @@ html[data-dshm] *::-webkit-scrollbar {
        * control therefore falls back to an inline Tabler-style glyph of its own.
        */
       /*
-       * panel-left is the OFFICIAL header glyph mirrored: the host draws the
-       * right-sidebar control as a 16pt rounded rect with its divider bar at x=5.5
-       * and a 1px stroke, so the left handle uses the same drawing with the bar at
-       * 16 - 5.5 = 10.5. Same 15px box, same 1px stroke, same optical centre.
+       * panel-left is the official header glyph AS DRAWN, and that is what makes the
+       * pair mirror images: the host renders its right-sidebar control with
+       * transform: scaleX(-1) over this same artwork (measured: matrix(-1, 0, 0, 1, 0, 0)),
+       * so its bar lands on the right of the box while this one keeps the bar on the
+       * left. Copying the host's *rendered* result (bar at 10.5, unflipped) made the two
+       * icons identical instead of mirrored.
        */
       const FALLBACK_PATHS = {
         'panel-left': {
@@ -970,7 +972,7 @@ html[data-dshm] *::-webkit-scrollbar {
           stroke: 1,
           paths: [
             'M13.5 1.5H2.5C1.94772 1.5 1.5 1.94772 1.5 2.5V13.5C1.5 14.0523 1.94772 14.5 2.5 14.5H13.5C14.0523 14.5 14.5 14.0523 14.5 13.5V2.5C14.5 1.94772 14.0523 1.5 13.5 1.5Z',
-            'M10.5 1.5V14.5',
+            'M5.5 1.5V14.5',
           ],
         },
         'chevron-down': { viewBox: '0 0 24 24', stroke: 2, paths: ['M6 9l6 6 6-6'] },
