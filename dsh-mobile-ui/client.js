@@ -654,6 +654,12 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
   width: 100vw !important;
   max-width: 100vw !important;
   box-sizing: border-box !important;
+  /* The row is a flex item of the seat's bottom band: `width` alone is only its
+     base size, and the default shrink pulled it back to min-content (237px of
+     390), which is what squeezed the pills and pushed the context ring onto the
+     truncated text. flex: none keeps the full frame width. */
+  flex: none !important;
+  min-width: 0 !important;
   /* Only a token inset: the row runs to the screen edges and its own centred
      content decides where the pills sit, so a phone with a little less room still
      fits their text before it truncates. */
@@ -669,8 +675,8 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
  * still truncates. The ring keeps its own slot at the end of its group.
  */
 html[data-dshm] [data-phase='active'] [data-composer-stats] > * {
-  flex: 0 0 auto !important;
-  min-width: max-content !important;
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
 }
 
 /*
