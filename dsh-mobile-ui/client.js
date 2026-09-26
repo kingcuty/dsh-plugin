@@ -646,7 +646,14 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
    * narrower phone still fits their text (the row's own box is transparent, and the
    * pills stay inside the frame because the row's padding keeps them there).
    */
-  width: calc(100% + var(--dsh-composer-side-clearance, 16px) * 2 + var(--dshm-rail-inset, 42px)) !important;
+  /* Viewport-anchored, not parent-anchored: the seat is a centred column whose width
+     is decided by its widest card, so a percentage here left the row 237px wide on a
+     390px frame and squeezed both pill groups — the context ring then landed on the
+     truncated text. 100vw gives the row the frame's whole width; the adapter's
+     measured shift re-centres it on the screen. */
+  width: 100vw !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
   /* Only a token inset: the row runs to the screen edges and its own centred
      content decides where the pills sit, so a phone with a little less room still
      fits their text before it truncates. */
@@ -654,6 +661,16 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
   padding-right: 8px !important;
   /* Measured by the adapter: the offset that lands the row on the frame's centre. */
   translate: var(--dshm-stats-shift, 0px) 0;
+}
+
+/*
+ * Each pill group keeps its natural width, so within the frame's width neither group is
+ * squeezed into an ellipsis next to the context ring; only a genuinely narrow phone
+ * still truncates. The ring keeps its own slot at the end of its group.
+ */
+html[data-dshm] [data-phase='active'] [data-composer-stats] > * {
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
 }
 
 /*
