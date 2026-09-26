@@ -654,7 +654,7 @@ html[data-dshm] [data-phase='active'] [data-composer-stats] {
   width: 100vw !important;
   max-width: 100vw !important;
   box-sizing: border-box !important;
-  /* The row is a flex item of the seat's bottom band: `width` alone is only its
+  /* The row is a flex item of the seat's bottom band: width alone is only its
      base size, and the default shrink pulled it back to min-content (237px of
      390), which is what squeezed the pills and pushed the context ring onto the
      truncated text. flex: none keeps the full frame width. */
