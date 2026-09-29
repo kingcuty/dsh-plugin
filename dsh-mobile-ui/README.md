@@ -87,10 +87,12 @@ systemctl --user restart dsh-web          # 已挂载的行需要冷启动才会
 
 1. **看控制台**：插件第一次在手机 UA 上接管时会自检结构缝，缺哪个会直接报名字 ——
    `[mobileUi] DSH DOM seam missing: card [data-composer-card] — this DSH build renamed them, update SEAMS in client.js`
-2. **只改一张表**：全部上游选择器集中在 `client.js` 顶部的 `SEAMS` 字典（13 条），改名通常就是改一个字符串；
-3. **跑一遍自检**：`node --test`（含 `names the upstream seam that a future DSH build renames`）＋ 手机刷新看布局。
+2. **只改一张表**：全部上游选择器集中在 `client.js` 顶部的 `SEAMS` 字典（15 条，其中 7 条必需），改名通常就是改一个字符串；
+3. **跑一遍自检**：`node --test`（6 项，含 `names the upstream seam that a future DSH build renames`）＋ 手机刷新看布局。
 
-适配基线：**DSH 0.1.5-rc 系（本机 2026-09-21 实机验证）**，鸿蒙 390×844。
+**完整流程与验收标准见 [ADAPTATION.md](ADAPTATION.md)**：升级后照它走一轮（采缝 → 改表 → 同步运行时 → 单测 → 实机 → **性能** → 回退 → 更新基线），每项都有可判定的判据。注意 0.1.7 那轮的经验——**15 条缝一条没改，问题出在性能**（长会话被逐节点测量拖死），所以性能验收不能省。
+
+适配基线：**DSH 0.1.7-rc.2（本机 2026-09-26 实机验证）**，鸿蒙 ArkWeb 390×844。
 
 
 
@@ -123,7 +125,7 @@ systemctl --user restart dsh-web          # 已挂载的行需要冷启动才会
 
 ## 验证
 
-单元测试（`node --test`，4 项）：UA 判定、三轨模板解析、样式缝选择器守护。
+单元测试（`node --test`，6 项）：UA 判定、三轨模板解析与回退、设置开关读写、结构缝自检、样式选择器守护。
 
 真实界面验证（Playwright，对运行中的本机 GUI）：
 
