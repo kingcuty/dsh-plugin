@@ -26,7 +26,7 @@ async function loadPlugin() {
 }
 
 const { __internals } = await loadPlugin()
-const { isMobilePlatform, overlayColumns, CSS, ENABLED_KEY, readEnabled, writeEnabled } = __internals
+const { isMobilePlatform, overlayColumns, CSS, ENABLED_KEY, readEnabled, writeEnabled, mainViewSessionId } = __internals
 
 test('identifies the phone platforms the plugin serves', () => {
   const phones = [
@@ -80,12 +80,28 @@ test('names the upstream seam that a future DSH build renames', () => {
   assert.deepEqual(missingSeams(fakeRoot([SEAMS.card])), REQUIRED_SEAMS.filter(name => name !== 'card'))
   for (const name of REQUIRED_SEAMS) assert.ok(SEAMS[name] !== undefined, 'unknown required seam ' + name)
   assert.ok(SEAMS.todoPanel !== undefined && SEAMS.queueDock !== undefined, 'optional feature seams stay declared')
+  // The stats line's container is optional: without it the row keeps the official
+  // placement instead of the frame-wide one, so it must never gate the plugin.
+  assert.equal(SEAMS.statsLineSlot, "[data-slot='conversation.composer.dock']")
+  assert.ok(!REQUIRED_SEAMS.includes('statsLineSlot'))
+})
+
+test('finds the current Session in the public list projection', () => {
+  const state = (...rows) => ({
+    byId: Object.fromEntries(rows.map(([id, mainView]) => [id, { id, retainedBy: { mainView } }])),
+  })
+  // The projection carries the list, not a selected id: the drawer dismisses on the
+  // retained main-view row, so that row has to come out of the summaries.
+  assert.equal(mainViewSessionId(state(['a', 0], ['b', 1], ['c', 0])), 'b')
+  assert.equal(mainViewSessionId(state(['a', 0], ['c', 2])), 'c', 'any live retention marks the row')
+  assert.equal(mainViewSessionId(state(['a', undefined], ['c', 0])), undefined, 'no retention means no current Session')
+  assert.equal(mainViewSessionId({ byId: {} }), undefined, 'an empty catalog has no current Session')
 })
 
 test('ships the selectors the adaptation depends on', () => {
   for (const selector of [
     '[data-dshm-frame]', '[data-dshm-sidebar]', '[data-dshm-center]', '[data-dshm-right]',
     "[data-dshm-composer='collapsed']", '[data-composer-card]', '[data-conversation-scroll]',
-    '.dshm-handle', '.dshm-scrim', '.dshm-fab',
+    '[data-dshm-line]', '.dshm-handle', '.dshm-scrim', '.dshm-fab',
   ]) assert.ok(CSS.includes(selector), 'missing ' + selector)
 })

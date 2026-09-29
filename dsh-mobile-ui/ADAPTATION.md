@@ -12,13 +12,13 @@
 
 | 项 | 值 |
 | --- | --- |
-| DSH 版本 / 上游 commit | `0.1.7-rc.2` / `477b4f4` |
-| 适配完成日期 | 2026-09-26 |
+| DSH 版本 / 上游 commit | `0.2.0-rc.1` / `44fc645`（上游快照 `ea1c3ef` + 本地移植） |
+| 适配完成日期 | 2026-09-29 |
 | 适配人 | kingcuty |
-| `SEAMS` 条数 / 必需条数 | 15 / 7 |
-| 单测 | `node --test` 6/6 通过 |
-| 实机验收（§4 A–D、F、G） | 通过（鸿蒙 ArkWeb，390×844） |
-| 性能验收（§4 E） | 通过（6912 节点长会话：打开 72ms、滚动 12 次 733ms） |
+| `SEAMS` 条数 / 必需条数 | 16 / 7（新增 1 条可选缝 `statsLineSlot`） |
+| 单测 | `node --test` 7/7 通过 |
+| 实机验收（§4 A–D、F、G） | 通过（Playwright 鸿蒙 ArkWeb UA，390×844；桌面 1440×900） |
+| 性能验收（§4 E） | 通过（9613 节点长会话：往返 ≤1.5ms、滚动 12 次 272ms、滚动期回调 3 次、单次测量 3.4ms） |
 | 结论 | ✅ 可用 |
 
 > 基线一旦更新，README「升级适配」章节里那句适配基线也要同步改，避免两处说法漂移。
@@ -44,6 +44,32 @@
 2. **性能是一等验收项**（§4 E），不是"顺手看看"；任何新增的观察器/测量路径都要按 E3 检查放大倍数，禁止在结构观察器里直连 `refresh()`；
 3. **改完必须验证运行时同步**（§3 步骤 3 与 G4 的 inode 比对），否则会误判成"改了没用"；
 4. **升级后首次加载变慢属预期**，第二次仍慢才按故障排查。
+
+---
+
+## 一点六、0.2.0-rc.1 适配实录（2026-09-29）
+
+**结论先说：官方一条缝都没改名，出问题的全是插件自己。** 这一轮把「升级适配 ≠ 改选择器」再次验证了一遍——新增的 1 条缝是插件为了修自己的布局加的，不是官方改名。
+
+| 事实 | 结果 |
+| --- | --- |
+| 官方 DOM 缝 | 0.1.7-rc.2 的 15 条**全部命中，一条没改**；本轮新增 1 条可选缝 `statsLineSlot`（`[data-slot='conversation.composer.dock']`）供插件定位统计行所在的那条 flex 线 |
+| 缺陷 1 | **自检误报**：0.2.0 里打开空白会话时，聊天列先挂载、输入区底栏（`[data-composer-stats]`）晚一个 commit 挂载，自检正好落在这个窗口里，于是把健康构建报成 `DSH DOM seam missing: statsRow`。真机表现为"升级后控制台报缝没了"，实际什么都没改名 |
+| 缺陷 2 | **抽屉不收起**：抽屉里点会话后侧栏不回收。根因是插件读 `useSessions(s => s.current)`，而 `SessionListState` 从来只有 `ids/byId/phase/projectionsBySession`（0.1.7 也一样），`current` 恒为 `undefined`，只有「切换面板」才触发收起 |
+| 缺陷 3 | **统计行越界**：官方把上下文已用并入这行后，三块内容（两组胶囊 + 上下文环）自然宽度 414–449px > 390px 帧；同时行自身是 `width: 100vw` 的固定盒、官方容器（314px）把它按居中摊开，行左移 60px、上下文环右移出屏 16px，两端都被裁 |
+| 性能 | 无回归：9613 节点长会话往返 ≤1.5ms、滚动 12 次 272ms、滚动期回调 3 次 |
+
+**对应修法**
+
+1. 自检改为**延迟判定**：`chatFlow` 出现后若仍有缝缺失，等 `SEAM_SETTLE_MS = 1500ms` 再复测一次，仍缺失才报——改名是持久的，挂载瞬态不是。
+2. 会话选中改读**公开投影**里的真实会话：`Object.values(byId).find(s => (s.retainedBy.mainView ?? 0) > 0)`（官方侧栏高亮同一行用的是同一个判据），并把它抽成纯函数 `mainViewSessionId` + 单测。
+3. 统计行改为交给**官方那条 flex 线**：适配器给 dock 打 `data-dshm-line`，量一个 `--dshm-line-shift` 把整行落回帧中线，行自身改成内容宽度 + 可收缩，让出上下文环那一列。三块内容都留在帧内，胶囊各自在自己的盒子里省略（单行的物理上限，见 §4 B6）。
+
+**由此补充的验收原则**：
+
+5. **自检也要防抖**——一次性判定必须抗"分多个 commit 挂载"的瞬态，否则健康构建会被报成改名；
+6. **读官方投影先看字段是否存在**——文档注释（"Session list and current selection"）不等于投影真有 `current`；
+7. **有官方兄弟元素的行要连兄弟一起量**——统计行的宽度不是它自己的事：同一 flex 线上的上下文环是官方元素，行独占帧宽就等于把兄弟挤出屏幕。
 
 ---
 
@@ -111,7 +137,7 @@ stat -c '%i %n' client.js ~/.dsh/profiles/web/node_modules/dsh-mobile-ui/client.
 ### 步骤 4 · 单测与语法
 
 ```bash
-node --check client.js && node --test     # 期望 6/6 通过
+node --check client.js && node --test     # 期望 7/7 通过
 ```
 
 ### 步骤 5 · 实机验收（§4 的 A–D、F、G）
@@ -154,6 +180,7 @@ node --check client.js && node --test     # 期望 6/6 通过
 | B3 | 侧栏抽屉化 | 侧栏 `position: fixed`、宽约 281px、默认在屏外（`left ≈ -58`，`visibility: hidden`） | 控制台读侧栏 rect |
 | B4 | 输入区默认折叠 | `[data-composer-card]` 收起态 `display: none`；`[data-composer-stats]` 常驻可见 | 控制台 |
 | B5 | 把手就位 | `[data-dshm-handle]` 在左上角约 (0,6)，28×28 | 控制台读 rect |
+| B6 | 统计行不越界 | 统计行盒宽 = 帧宽（`0..390`），两颗胶囊与官方上下文环全部落在 `0..390` 内且互不重叠；行与环之间的间距 = 官方 `dock` 的 `gap`（12px），不是被撑开的空档 | 控制台读 rect（附录 §6.4） |
 
 ### C. 交互
 
@@ -198,7 +225,7 @@ node --check client.js && node --test     # 期望 6/6 通过
 | # | 验收项 | 判据 | 怎么测 |
 | --- | --- | --- | --- |
 | G1 | 语法通过 | `node --check client.js` 无输出 | 命令 |
-| G2 | 单测全绿 | `node --test` 全通过（当前 6 项） | 命令 |
+| G2 | 单测全绿 | `node --test` 全通过（当前 7 项） | 命令 |
 | G3 | 官方仓库干净 | `deepseek-harness` 的 `git status` 无插件相关改动 | `git status` |
 | G4 | 运行时已同步 | 源文件与 `node_modules` 副本 inode 相同 | `stat -c '%i %n'` |
 | G5 | 控制台干净 | 手机与桌面场景均 0 error | 浏览器控制台 |
@@ -215,6 +242,8 @@ node --check client.js && node --test     # 期望 6/6 通过
 | 性能不达标（E 组不过） | 先查是不是新增了逐节点触发的测量路径：所有结构/尺寸/属性观察器必须统一走 `scheduleRefresh`（防抖），禁止直连 `refresh()`；确需更激进降级时提高 `REFRESH_DEBOUNCE_MS` 或复用 `ANIMATED_NODES_MAX` 的长会话降级分支 |
 | 改完"没生效" | 九成是硬链接断开（§步骤 3），先比对 inode 再排查逻辑 |
 | 桌面端被误伤 | 检查新加的选择器是否缺少 `html[data-dshm]` 作用域前缀，或 UA 判定是否被放宽 |
+| 统计行越界（文字出屏 / 上下文环被裁 / 中间空档过大） | 先量三件事：行盒是否等于帧宽、行盒与环是否同一条 flex 线（官方 `dock`）、`--dshm-line-shift` 是否被写进 frame。三块内容自然宽度超过帧宽时，**单行必然省略**，不要靠"再让一点宽度"绕；要零截断只有换行两行或砍项 |
+| 自检报了某条缝缺失但布局正常 | 先确认不是挂载瞬态：等 2s 再刷新看是否仍报。若仍报，再按"缝改名"处理 |
 
 ---
 
@@ -276,13 +305,33 @@ for (const s of ['[data-composer-card]','[data-composer-seat]','[data-composer-s
 console.log('pass ≈', Math.round((performance.now() - t0) * 100) / 100, 'ms', '| nodes:', document.getElementsByTagName('*').length)
 ```
 
-### 6.4 常用命令
+### 6.4 统计行几何（B6）
+
+手机视口、会话已选中的状态下执行：
+
+```js
+const bar = document.querySelector('[data-composer-stats]')
+const line = bar.parentElement.parentElement          // 官方 composer dock（统计行所在那条 flex 线）
+const meter = [...line.children].find(c => c !== bar.parentElement)   // 官方「上下文已用」
+const box = e => { const b = e.getBoundingClientRect(); return [+b.x.toFixed(1), +b.right.toFixed(1)] }
+console.log({
+  line: box(line),                                     // 期望 [0, 帧宽]
+  pills: [...bar.children].map(box),                   // 期望全部 ≥0 且 ≤帧宽
+  meter: box(meter),                                   // 期望右端 = 帧宽
+  gap: box(meter)[0] - Math.max(...[...bar.children].map(c => box(c)[1])),
+  shift: document.querySelector('[data-dshm-frame]').style.getPropertyValue('--dshm-line-shift'),
+})
+```
+
+判据：`line` 恰好等于 `[0, 帧宽]`（本机 390 帧实测 `[0, 390]`、`--dshm-line-shift: 41px`）；`pills` 与 `meter` 全在帧内；`gap` = 官方 `dock` 的 `gap`（12px）。三块内容自然宽度超过帧宽时，胶囊在**自己的盒子里**省略（`scrollWidth == clientWidth`，由文字 span 自己 ellipsis），不是被屏幕边缘裁掉。
+
+### 6.5 常用命令
 
 ```bash
 node --check client.js                      # 语法
-node --test                                 # 单测（6 项）
-ln -f client.js ~/.dsh/profiles/web/node_modules/dsh-mobile-ui/client.js   # 同步运行时
-stat -c '%i %n' client.js ~/.dsh/profiles/web/node_modules/dsh-mobile-ui/client.js  # 验证同步
+node --test                                 # 单测（7 项）
+ls -l ~/.dsh/profiles/web/node_modules/ | grep dsh-mobile-ui   # 看是软链还是硬链副本
+stat -c '%i %n' client.js ~/.dsh/profiles/web/node_modules/dsh-mobile-ui/client.js  # 验证运行时同步
 bash install.sh --profile web               # 标准安装（不加 --restart 以免中断会话）
 git push github main && git push origin main # 双远端推送
 ```

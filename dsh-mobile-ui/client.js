@@ -48,6 +48,7 @@ const SEAMS = {
   inputScroll: '[data-input-scroll]',
   chatFlow: '[data-chat-flow]',
   statsRow: '[data-composer-stats]',
+  statsLineSlot: "[data-slot='conversation.composer.dock']",
   toBottomSlot: "[class*='toBottomSlot']",
   rightSidebarButton: '[data-sidebar-right-expand]',
   todoPanel: "[data-testid='todo-panel']",
@@ -73,6 +74,20 @@ const reportMissingSeams = (root = document) => {
   if (missing.length === 0) return
   const detail = missing.map(name => `${name} ${SEAMS[name]}`).join(', ')
   console.warn(`[${NS}] DSH DOM seam missing: ${detail} — this DSH build renamed them, update SEAMS in client.js`)
+}
+
+/**
+ * The Session the shell shows as current, read from the public list projection.
+ * The main view's live retention marks the selected row; nothing else in the
+ * projection names a selection.
+ * @param state - Session list projection (`useSessions` snapshot).
+ * @returns The retained Session id, or undefined while none is current.
+ */
+const mainViewSessionId = (state) => {
+  for (const summary of Object.values(state.byId)) {
+    if ((summary.retainedBy.mainView ?? 0) > 0) return summary.id
+  }
+  return undefined
 }
     /** Frame width below which the phone presentation applies (the shell's own auto-collapse). */
     const NARROW_MAX = 1024
@@ -634,46 +649,46 @@ html[data-dshm] [data-phase] header {
 }
 
 /*
- * The permanent stats row is the bottom-most element: the rail column ends above it
- * and the floating toggle lives in the band above, so it takes back the width the
- * seat reserves for that column and re-centres on the frame. The wider row gives
- * the stat pills more characters before they truncate.
+ * The stats row and the official context meter share one line under the composer, and
+ * that line's container is the composer dock — a 314px box on a 390px frame, because
+ * the composer band spends 16px of side clearance and the seat reserves the rest of the
+ * control column. Official centring split that 76px shortfall across both ends: the
+ * row's own text left the left screen edge while the meter, which the shell merged into
+ * this line, left the right one. The adapter tags the dock and writes the one measured
+ * offset that lands the line on the frame's centre line, so the row and the meter
+ * together span the frame instead of overflowing it.
  */
-html[data-dshm] [data-phase='active'] [data-composer-stats] {
+html[data-dshm] [data-phase='active'] [data-dshm-line] {
   /*
-   * The row's own width stops one composer clearance short on each side, and the
-   * seat reserves the control column for the cards above. Both are taken back here
-   * (a wider row and half the reserve as a shift) so the row spans the composer's
-   * full width on the frame's centre line, and the stat pills get the same 32px of
-   * extra room for their text before they truncate.
+   * Viewport-anchored, not parent-anchored: the dock sits inside the composer's padded
+   * column, so a percentage width would keep the band's own shortfall. 100vw gives the
+   * line the frame's whole width and the measured shift centres it on the frame.
    */
-  /*
-   * Take back the composer's own side clearance AND the seat's control-column
-   * reserve: the row then has the frame's whole width to lay the pills out, so a
-   * narrower phone still fits their text (the row's own box is transparent, and the
-   * pills stay inside the frame because the row's padding keeps them there).
-   */
-  /* Viewport-anchored, not parent-anchored: the seat is a centred column whose width
-     is decided by its widest card, so a percentage here left the row 237px wide on a
-     390px frame and squeezed both pill groups — the context ring then landed on the
-     truncated text. 100vw gives the row the frame's whole width; the adapter's
-     measured shift re-centres it on the screen. */
   width: 100vw !important;
   max-width: 100vw !important;
+  margin-left: calc((100% - 100vw) / 2) !important;
+  translate: var(--dshm-line-shift, 0px) 0 !important;
+}
+
+/*
+ * The row is the line's flexible half: it takes what the context meter leaves and
+ * ellipsises its own pills inside that, so all three items stay on the frame. Claiming
+ * the frame's whole width instead (the earlier 100vw row) pushed the meter 16px past
+ * the right screen edge and, because the row's content is centred in its own box, cut
+ * the first pill's text at the left one.
+ */
+html[data-dshm] [data-phase='active'] [data-composer-stats] {
+  width: auto !important;
+  max-width: 100% !important;
   box-sizing: border-box !important;
-  /* The row is a flex item of the seat's bottom band: width alone is only its
-     base size, and the default shrink pulled it back to min-content (237px of
-     390), which is what squeezed the pills and pushed the context ring onto the
-     truncated text. flex: none keeps the full frame width. */
-  flex: none !important;
+  /* A flex item of that line: its width alone is only a base size, and min-width: 0
+     with a shrink factor is what lets it give way to the meter instead of overflowing. */
+  flex: 0 1 auto !important;
   min-width: 0 !important;
-  /* No inset at all: the row spans the frame edge to edge and its centred content
-     decides where the pills sit, so on a phone every available pixel goes to the
-     figures before anything truncates. */
+  /* No inset at all: every pixel the meter leaves goes to the figures. */
   padding-left: 0 !important;
   padding-right: 0 !important;
-  /* No adapter shift: the row IS the frame's width (100vw) and its content is centred
-     by justify-content, so any extra translate would push the whole line sideways. */
+  /* The line carries the shift; the row is placed by the line's own layout. */
   translate: none !important;
   overflow: hidden !important;
 }
@@ -1036,7 +1051,14 @@ html[data-dshm] *::-webkit-scrollbar {
       useEffect(() => { requestRefresh() }, [])
       const mobile = useShell(snapshot => snapshot.mobile)
       const drawer = useShell(snapshot => snapshot.drawer)
-      const currentSession = useSessions(snapshot => snapshot.current)
+      /*
+       * The Session projection is the list, not a selected id: the shell marks the
+       * row whose main-view retention is live as the current one, which is the same
+       * selection the sidebar highlights. Reading that summary — instead of a
+       * `current` field the projection does not carry — is what turns a picked
+       * Session into a destination change the drawer reacts to.
+       */
+      const currentSession = useSessions(mainViewSessionId)
       const activePanel = usePanelInfo(info => info.activePanelId)
       // Choosing a destination dismisses the drawer: the picked session or
       // global panel is what the frame should show, not content under the scrim.
@@ -1253,6 +1275,7 @@ html[data-dshm] *::-webkit-scrollbar {
     function createAdapter(store) {
       let frame = null
       let conversationRoot = null
+      let lineRoot = null
       let frameResize = null
       let frameAttributes = null
       let phaseAttributes = null
@@ -1511,6 +1534,15 @@ html[data-dshm] *::-webkit-scrollbar {
             phaseAttributes.observe(conversationRoot, { attributes: true, attributeFilter: ['data-phase'] })
           }
         }
+        // The stats line's own container: the slot wrapper is `display: contents`, so
+        // its parent is the flex line that also holds the official context meter.
+        const slotWrapper = seam('statsLineSlot')
+        const nextLine = slotWrapper === null ? null : slotWrapper.parentElement
+        if (nextLine !== lineRoot) {
+          if (lineRoot !== null) lineRoot.removeAttribute('data-dshm-line')
+          lineRoot = nextLine
+          if (lineRoot !== null) tag(lineRoot, 'data-dshm-line')
+        }
       }
 
       const publish = (mobile, active) => {
@@ -1538,6 +1570,28 @@ html[data-dshm] *::-webkit-scrollbar {
       }
 
       let seamsReported = false
+      let seamSettleTimer = null
+      /*
+       * A conversation mounts its chat column one commit before the composer dock,
+       * so a probe taken the instant `chatFlow` appears can read a seam set that is
+       * still assembling and call a healthy build renamed. A rename stays missing,
+       * a mount in progress does not: report only what is still missing after a
+       * settle window, and re-probe at that point.
+       */
+      const SEAM_SETTLE_MS = 1500
+      const checkSeams = () => {
+        if (seamsReported || seam('chatFlow') === null) return
+        if (missingSeams().length === 0) {
+          seamsReported = true
+          return
+        }
+        if (seamSettleTimer !== null) return
+        seamSettleTimer = window.setTimeout(() => {
+          seamSettleTimer = null
+          seamsReported = true
+          reportMissingSeams()
+        }, SEAM_SETTLE_MS)
+      }
       const refresh = () => {
         attach()
         const previous = store.getSnapshot()
@@ -1550,10 +1604,7 @@ html[data-dshm] *::-webkit-scrollbar {
           // drawer, no composer chrome — the official layout returns live.
           mobile = mobile && previous.enabled
           if (mobile) {
-            if (!seamsReported && seam('chatFlow') !== null) {
-              seamsReported = true
-              reportMissingSeams()
-            }
+            checkSeams()
             setVar('--dshm-columns', overlayColumns(frame.style.gridTemplateColumns))
             drawer = !frame.hasAttribute('data-sidebar-collapsed')
             const card = seam('card')
@@ -1618,18 +1669,20 @@ html[data-dshm] *::-webkit-scrollbar {
           const cornerRect = cornerButton.getBoundingClientRect()
           if (cornerRect.height > 0) setVar('--dshm-handle-top', Math.round(cornerRect.top) + 'px')
         }
-        // Centre the permanent stats row on the frame. It is measured against the
-        // unshifted box, so the applied shift never feeds back into the next pass.
-        const statsBar = seam('statsRow')
-        if (mobile && frame !== null && statsBar !== null) {
-          const barRect = statsBar.getBoundingClientRect()
+        // Centre the stats line (the row plus the official context meter beside it) on
+        // the frame. The band the line sits in is narrower than the frame, so the
+        // measured offset is what lands the pair inside the screen. It is measured
+        // against the unshifted box, so the applied shift never feeds back into the
+        // next pass.
+        if (mobile && frame !== null && lineRoot !== null) {
+          const lineRect = lineRoot.getBoundingClientRect()
           const frameRect = frame.getBoundingClientRect()
-          const applied = Number.parseFloat(frame.style.getPropertyValue('--dshm-stats-shift')) || 0
-          if (barRect.width > 0) {
-            const naturalCenter = (barRect.left + barRect.right) / 2 - applied
+          const applied = Number.parseFloat(frame.style.getPropertyValue('--dshm-line-shift')) || 0
+          if (lineRect.width > 0) {
+            const naturalCenter = (lineRect.left + lineRect.right) / 2 - applied
             const shift = Math.round((frameRect.left + frameRect.right) / 2 - naturalCenter)
-            if (shift !== 0) setVar('--dshm-stats-shift', shift + 'px')
-            else clearVar('--dshm-stats-shift')
+            if (shift !== 0) setVar('--dshm-line-shift', shift + 'px')
+            else clearVar('--dshm-line-shift')
           }
         }
         // The conversation header keeps its official height after the tab row is
@@ -1691,14 +1744,15 @@ html[data-dshm] *::-webkit-scrollbar {
         if (controlsRoot !== null && controlsGuard !== null) controlsRoot.removeEventListener('mousedown', controlsGuard, true)
         if (placementFrame !== null) window.cancelAnimationFrame(placementFrame)
         if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+        if (seamSettleTimer !== null) window.clearTimeout(seamSettleTimer)
         if (placementTimer !== null) window.clearTimeout(placementTimer)
         const html = document.documentElement
         html.removeAttribute('data-dshm')
         html.removeAttribute('data-dshm-composer')
+        html.removeAttribute('data-dshm-animating')
         if (frame !== null) {
-          frame.style.removeProperty('--dshm-columns')
-          frame.style.removeProperty('--dshm-card-right')
-          frame.style.removeProperty('--dshm-card-bottom')
+          for (const name of writtenVars.keys()) frame.style.removeProperty(name)
+          writtenVars.clear()
           for (const element of [frame, frame.children[0], frame.children[1], frame.children[2]]) {
             if (element === null || element === undefined) continue
             element.removeAttribute('data-dshm-frame')
@@ -1706,6 +1760,29 @@ html[data-dshm] *::-webkit-scrollbar {
             element.removeAttribute('data-dshm-center')
             element.removeAttribute('data-dshm-right')
           }
+        }
+        /*
+         * Marks written onto official nodes, and the view-switch row cloned into the
+         * header menu: an unload has to leave the shell exactly as it found it, since
+         * none of these live in DOM this plugin owns.
+         */
+        for (const element of document.querySelectorAll('[data-dshm-primary], [data-dshm-to-bottom], [data-dshm-view-item]')) {
+          element.removeAttribute('data-dshm-primary')
+          element.removeAttribute('data-dshm-to-bottom')
+          if (element.hasAttribute('data-dshm-view-item')) element.remove()
+        }
+        for (const element of document.querySelectorAll('[data-dshm-view-menu], [data-dshm-shift], [data-dshm-line]')) {
+          element.removeAttribute('data-dshm-view-menu')
+          element.removeAttribute('data-dshm-shift')
+          element.removeAttribute('data-dshm-line')
+          element.style.removeProperty('--dshm-shift')
+        }
+        lineRoot = null
+        const card = seam('card')
+        if (card !== null) {
+          card.style.removeProperty('max-height')
+          card.style.removeProperty('overflow')
+          card.style.removeProperty('transition')
         }
       }
 
@@ -1850,7 +1927,7 @@ html[data-dshm] *::-webkit-scrollbar {
     const module = {
     apply,
     inject,
-    __internals: { isMobilePlatform, overlayColumns, CSS, SEAMS, REQUIRED_SEAMS, missingSeams, ENABLED_KEY, readEnabled, writeEnabled },
+    __internals: { isMobilePlatform, overlayColumns, CSS, SEAMS, REQUIRED_SEAMS, missingSeams, mainViewSessionId, ENABLED_KEY, readEnabled, writeEnabled },
   }
 
     return module

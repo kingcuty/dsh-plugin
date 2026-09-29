@@ -87,12 +87,12 @@ systemctl --user restart dsh-web          # 已挂载的行需要冷启动才会
 
 1. **看控制台**：插件第一次在手机 UA 上接管时会自检结构缝，缺哪个会直接报名字 ——
    `[mobileUi] DSH DOM seam missing: card [data-composer-card] — this DSH build renamed them, update SEAMS in client.js`
-2. **只改一张表**：全部上游选择器集中在 `client.js` 顶部的 `SEAMS` 字典（15 条，其中 7 条必需），改名通常就是改一个字符串；
-3. **跑一遍自检**：`node --test`（6 项，含 `names the upstream seam that a future DSH build renames`）＋ 手机刷新看布局。
+2. **只改一张表**：全部上游选择器集中在 `client.js` 顶部的 `SEAMS` 字典（16 条，其中 7 条必需），改名通常就是改一个字符串；
+3. **跑一遍自检**：`node --test`（7 项，含 `names the upstream seam that a future DSH build renames`、`finds the current Session in the public list projection`）＋ 手机刷新看布局。
 
-**完整流程与验收标准见 [ADAPTATION.md](ADAPTATION.md)**：升级后照它走一轮（采缝 → 改表 → 同步运行时 → 单测 → 实机 → **性能** → 回退 → 更新基线），每项都有可判定的判据。注意 0.1.7 那轮的经验——**15 条缝一条没改，问题出在性能**（长会话被逐节点测量拖死），所以性能验收不能省。
+**完整流程与验收标准见 [ADAPTATION.md](ADAPTATION.md)**：升级后照它走一轮（采缝 → 改表 → 同步运行时 → 单测 → 实机 → **性能** → 回退 → 更新基线），每项都有可判定的判据。两轮的经验都一样——**官方没改过一条缝，出问题的都是插件自己**：0.1.7 那轮是性能（长会话被逐节点测量拖死），0.2.0 这轮是自检误报、抽屉不收、统计行越界（见 ADAPTATION.md §1.6）。所以缝命中不等于适配完成。
 
-适配基线：**DSH 0.1.7-rc.2（本机 2026-09-26 实机验证）**，鸿蒙 ArkWeb 390×844。
+适配基线：**DSH 0.2.0-rc.1（本机 2026-09-29 实机验证）**，鸿蒙 ArkWeb UA 390×844（另验 900 宽平板与 1440 桌面）。
 
 
 
@@ -102,13 +102,14 @@ systemctl --user restart dsh-web          # 已挂载的行需要冷启动才会
 
 - **插槽**：往 `shell.overlay` 注册两个条目（抽屉把手/遮罩、输入区圆点），locale 与状态经 `inject`、`hooks` 下发；
 - **服务**：抽屉开关用公开的 `ctx.layout.toggleSidebar()`；会话/面板变化经标准 `useSessions`、`usePanelInfo` 观察；
-- **稳定 DOM 缝**：框架靠 `[data-shell-overlay]` 的父元素定位，状态读 `[data-sidebar-collapsed]`、`[data-phase]`，输入区靠 `[data-composer-card]`、`[data-composer-stats]`、`[data-conversation-scroll]`、`[data-chat-flow]`；
+- **稳定 DOM 缝**：框架靠 `[data-shell-overlay]` 的父元素定位，状态读 `[data-sidebar-collapsed]`、`[data-phase]`，输入区靠 `[data-composer-card]`、`[data-composer-stats]`、`[data-conversation-scroll]`、`[data-chat-flow]`；统计行所在的那条 flex 线靠插槽包装 `[data-slot='conversation.composer.dock']` 找到（适配器给它打 `data-dshm-line`，并写一个实测的 `--dshm-line-shift` 把这行连同官方的「上下文已用」一起落在帧中线上）；
 - **样式**：注入一段作用域为 `html[data-dshm]` 的样式表，用 `--dshm-columns` 把框架自己的三轨模板「左轨归零」后交给 `grid-template-columns`（`!important` 才能压过内联样式），因此右栏轨道仍按官方求解结果保留。
 
 官方若改动上述缝，坏的只会是这个插件，卸载即恢复官方；升级 DSH 不需要动插件之外的任何文件。
 
 ## 已知取舍
 
+- 底部统计行是**单行**：两组胶囊 + 官方的「上下文已用」在 390 帧上自然宽度约 414–449px，超过帧宽，所以两颗胶囊各自在自己的盒子里省略尾巴（约 10–20% 文字）。这是单行的物理上限，不是布局没排好——要零截断只能换行两行（底栏 22px → 约 44px，占一行会话高度）或砍掉一项指标。行整体（含上下文环）严格落在帧内，不再有越界与被屏幕边缘裁切。
 - 折叠态下"停止生成"要多一步：点圆点展开后才看得到官方的 Stop 按钮。
 - 抽屉不是模态框：不锁焦点、不隐藏被覆盖内容（遮罩与栏内自带的切换控件负责收起）。
 - 依赖官方样式缝，属于「适配层」而非「官方功能」；官方大改布局时可能需要跟着改选择器。
@@ -125,7 +126,7 @@ systemctl --user restart dsh-web          # 已挂载的行需要冷启动才会
 
 ## 验证
 
-单元测试（`node --test`，6 项）：UA 判定、三轨模板解析与回退、设置开关读写、结构缝自检、样式选择器守护。
+单元测试（`node --test`，7 项）：UA 判定、三轨模板解析与回退、设置开关读写、结构缝自检、会话选中投影、样式选择器守护。
 
 真实界面验证（Playwright，对运行中的本机 GUI）：
 
@@ -159,6 +160,6 @@ systemctl --user restart dsh-web          # 已挂载的行需要冷启动才会
 | 设置面板手机化 | 抽屉式 374×820、导航为横向胶囊条、内容区可上下滚动 ✓ |
 | 设置-通用开关 | 「Mobile UI optimisation」选 Disable → `data-dshm` 消失、把手与浮钮移除、回到官方布局；选 Enable 恢复 ✓ |
 | 其它弹窗 | 权限风险确认框不再被拉成整屏（`:has(> nav)` 只命中设置外壳）✓ |
-| 单元测试 | `node --test` 6/6 ✓ |
+| 单元测试 | `node --test` 7/7 ✓ |
 | 控制台 | 各场景 pageerror / console error 均为 0 ✓ |
 
